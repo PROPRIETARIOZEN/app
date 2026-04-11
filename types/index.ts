@@ -1,61 +1,53 @@
 export type { Database } from './database'
 
+export type TipoImovel = 'apartamento' | 'casa' | 'kitnet' | 'comercial' | 'terreno' | 'outro'
+export type IndiceReajuste = 'igpm' | 'ipca' | 'fixo'
+export type StatusPagamento = 'pendente' | 'pago' | 'atrasado'
+export type StatusImovel = 'disponivel' | 'alugado' | 'manutencao'
+
 export type Imovel = {
   id: string
-  proprietario_id: string
-  titulo: string
+  user_id: string
+  apelido: string
   endereco: string
-  cidade: string
-  estado: string
-  cep: string
-  tipo: 'apartamento' | 'casa' | 'comercial' | 'terreno' | 'outro'
-  status: 'disponivel' | 'alugado' | 'manutencao'
+  tipo: TipoImovel
   valor_aluguel: number
-  descricao: string | null
-  created_at: string
-  updated_at: string
+  dia_vencimento: number
+  data_inicio_contrato: string | null
+  data_proximo_reajuste: string | null
+  indice_reajuste: IndiceReajuste
+  percentual_fixo: number | null
+  ativo: boolean
+  observacoes: string | null
+  criado_em: string
+  inquilinos?: { id: string; nome: string; ativo: boolean }[]
 }
 
 export type Inquilino = {
   id: string
-  proprietario_id: string
+  user_id: string
+  imovel_id: string
   nome: string
-  email: string
-  cpf: string
-  telefone: string
-  created_at: string
-  updated_at: string
+  telefone: string | null
+  email: string | null
+  cpf: string | null
+  ativo: boolean
+  criado_em: string
+  imovel?: { id: string; apelido: string } | null
 }
 
-export type Contrato = {
+export type Aluguel = {
   id: string
   imovel_id: string
-  inquilino_id: string
-  proprietario_id: string
-  data_inicio: string
-  data_fim: string | null
-  valor_aluguel: number
-  dia_vencimento: number
-  status: 'ativo' | 'encerrado' | 'cancelado'
-  created_at: string
-  updated_at: string
-  imovel?: Imovel
-  inquilino?: Inquilino
-}
-
-export type Pagamento = {
-  id: string
-  contrato_id: string
-  proprietario_id: string
-  valor: number
+  inquilino_id: string | null
   mes_referencia: string
+  valor: number
   data_vencimento: string
+  status: StatusPagamento
   data_pagamento: string | null
-  status: 'pendente' | 'pago' | 'atrasado' | 'cancelado'
   observacao: string | null
-  created_at: string
-  updated_at: string
-  contrato?: Contrato
+  recibo_gerado: boolean
+  criado_em: string
 }
 
 export type Profile = {
@@ -63,11 +55,8 @@ export type Profile = {
   nome: string
   email: string
   telefone: string | null
-  created_at: string
-  updated_at: string
+  plano: 'gratis' | 'pago'
+  stripe_customer_id: string | null
+  criado_em: string
+  atualizado_em: string
 }
-
-export type TipoImovel = 'apartamento' | 'casa' | 'comercial' | 'terreno' | 'outro'
-export type StatusImovel = 'disponivel' | 'alugado' | 'manutencao'
-export type StatusContrato = 'ativo' | 'encerrado' | 'cancelado'
-export type StatusPagamento = 'pendente' | 'pago' | 'atrasado' | 'cancelado'

@@ -1,21 +1,36 @@
 import jsPDF from 'jspdf'
-import { Pagamento, Contrato, Imovel, Inquilino, Profile } from '@/types'
 import { formatarData, formatarMoeda, formatarMesReferencia, formatarCPF } from './helpers'
 
 interface DadosRecibo {
-  pagamento: Pagamento & {
-    contrato: Contrato & {
-      imovel: Imovel
-      inquilino: Inquilino
+  pagamento: {
+    id: string
+    valor: number
+    mes_referencia: string
+    data_vencimento: string
+    data_pagamento: string | null
+    status: string
+    observacao: string | null
+    imovel: {
+      apelido: string
+      endereco: string
+    }
+    inquilino: {
+      nome: string
+      cpf: string | null
+      email: string | null
+      telefone: string | null
     }
   }
-  proprietario: Profile
+  proprietario: {
+    nome: string
+    email: string
+    telefone: string | null
+  }
 }
 
 export function gerarReciboPDF({ pagamento, proprietario }: DadosRecibo): void {
   const doc = new jsPDF()
-  const { contrato } = pagamento
-  const { imovel, inquilino } = contrato
+  const { imovel, inquilino } = pagamento
 
   const margemEsq = 20
   const larguraUtil = 170
@@ -72,9 +87,9 @@ export function gerarReciboPDF({ pagamento, proprietario }: DadosRecibo): void {
   doc.setFontSize(10)
   doc.text(`Nome: ${inquilino.nome}`, margemEsq, y)
   y += 6
-  doc.text(`CPF: ${formatarCPF(inquilino.cpf)}`, margemEsq, y)
-  y += 6
-  doc.text(`E-mail: ${inquilino.email}    Telefone: ${inquilino.telefone}`, margemEsq, y)
+  if (inquilino.cpf) { doc.text(`CPF: ${formatarCPF(inquilino.cpf)}`, margemEsq, y); y += 6 }
+  if (inquilino.email) { doc.text(`E-mail: ${inquilino.email}`, margemEsq, y); y += 6 }
+  if (inquilino.telefone) { doc.text(`Telefone: ${inquilino.telefone}`, margemEsq, y) }
 
   // Seção: Imóvel
   y += 12
@@ -85,9 +100,9 @@ export function gerarReciboPDF({ pagamento, proprietario }: DadosRecibo): void {
   y += 6
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
-  doc.text(`Endereço: ${imovel.endereco}`, margemEsq, y)
+  doc.text(`${imovel.apelido}`, margemEsq, y)
   y += 6
-  doc.text(`Cidade/UF: ${imovel.cidade} / ${imovel.estado}    CEP: ${imovel.cep}`, margemEsq, y)
+  doc.text(`Endereço: ${imovel.endereco}`, margemEsq, y)
 
   // Seção: Pagamento
   y += 12

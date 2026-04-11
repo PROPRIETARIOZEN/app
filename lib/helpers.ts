@@ -51,6 +51,7 @@ export function formatarTelefone(tel: string): string {
 export const labelsTipoImovel: Record<TipoImovel, string> = {
   apartamento: 'Apartamento',
   casa: 'Casa',
+  kitnet: 'Kitnet',
   comercial: 'Comercial',
   terreno: 'Terreno',
   outro: 'Outro',
@@ -68,7 +69,6 @@ export const labelsStatusPagamento: Record<StatusPagamento, { label: string; var
   pago: { label: 'Pago', variant: 'default' },
   pendente: { label: 'Pendente', variant: 'outline' },
   atrasado: { label: 'Atrasado', variant: 'destructive' },
-  cancelado: { label: 'Cancelado', variant: 'secondary' },
 }
 
 // Retorna o mês de referência formatado
