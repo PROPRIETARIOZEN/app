@@ -10,7 +10,12 @@ export function formatarMoeda(valor: number): string {
 
 // Formata data no padrão brasileiro
 export function formatarData(data: string | Date): string {
-  const date = typeof data === 'string' ? new Date(data + 'T00:00:00') : data
+  // Supabase retorna timestamps completos (ex: "2025-04-11T14:30:00.000000+00:00")
+  // Só appenda T00:00:00 para strings de data pura (YYYY-MM-DD)
+  const date =
+    typeof data === 'string'
+      ? new Date(data.includes('T') ? data : data + 'T00:00:00')
+      : data
   return new Intl.DateTimeFormat('pt-BR').format(date)
 }
 
