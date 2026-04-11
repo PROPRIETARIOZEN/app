@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase-server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
+
+export const dynamic = 'force-dynamic'
 
 // POST /api/portal
 // Cria uma sessão do Stripe Billing Portal para gerenciar/cancelar assinatura.
@@ -22,6 +24,7 @@ export async function POST() {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://proprietariozen.com.br'
+    const stripe = getStripe()
 
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,

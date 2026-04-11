@@ -1,8 +1,14 @@
 import Stripe from 'stripe'
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  typescript: true,
-})
+let _stripe: Stripe | undefined
+
+// Lazy singleton — evita inicialização no momento do build (env vars ausentes)
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { typescript: true })
+  }
+  return _stripe
+}
 
 // Limites e recursos por plano
 export const LIMITES_PLANO = {

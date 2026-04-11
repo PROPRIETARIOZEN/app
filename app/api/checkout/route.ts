@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase-server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
+
+export const dynamic = 'force-dynamic'
 
 // POST /api/checkout
 // Cria uma sessão de Stripe Checkout para o plano Pro.
@@ -23,6 +25,7 @@ export async function POST() {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://proprietariozen.com.br'
+    const stripe = getStripe()
 
     // Cria ou reutiliza o customer da Stripe
     let customerId = profile.stripe_customer_id
