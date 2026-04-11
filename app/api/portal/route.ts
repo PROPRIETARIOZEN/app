@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase-server'
 import { getStripe } from '@/lib/stripe'
+import { getAppUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Nenhuma assinatura ativa encontrada' }, { status: 400 })
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://proprietariozen.com.br'
+    const appUrl = getAppUrl()
     const stripe = getStripe()
 
     const session = await stripe.billingPortal.sessions.create({

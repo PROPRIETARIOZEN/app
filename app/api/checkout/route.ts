@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase-server'
 import { getStripe } from '@/lib/stripe'
+import { getAppUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +39,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Você já possui o plano Pro' }, { status: 400 })
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://proprietariozen.com.br'
+    const appUrl = getAppUrl()
     const stripe = getStripe()
 
     // Cria ou reutiliza o customer da Stripe
