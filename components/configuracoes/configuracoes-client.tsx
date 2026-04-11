@@ -50,7 +50,7 @@ export function ConfiguracoesClient({ profile, avatarUrl, qtdImoveis, notificaco
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <div>
         <h1 className="text-[28px] font-bold tracking-tight text-[#0F172A]">Configurações</h1>
         <p className="text-sm text-[#475569] mt-0.5">Gerencie sua conta e preferências</p>
