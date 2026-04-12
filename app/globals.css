@@ -6,6 +6,23 @@
   .text-balance { text-wrap: balance; }
 }
 
+/* ── Skip link ───────────────────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
+  padding: 10px 20px;
+  background: #059669;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0 0 8px 0;
+  transition: top 0.1s;
+}
+.skip-link:focus { top: 0; }
+
 /* ── Auth forms ──────────────────────────────────────────────────────────── */
 .auth-input {
   width: 100%;
