@@ -1,3 +1,5 @@
+import { LogoWhite, LogoColor } from '@/components/ui/logo'
+
 export default function AuthLayout({
   children,
 }: {
@@ -14,11 +16,8 @@ export default function AuthLayout({
         <div className="auth-blob-2" />
 
         {/* Logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center font-bold text-white text-base">
-            PZ
-          </div>
-          <span className="text-xl font-semibold text-white tracking-tight">ProprietárioZen</span>
+        <div className="relative z-10">
+          <LogoWhite iconSize={36} />
         </div>
 
         {/* Main content */}
@@ -103,11 +102,8 @@ export default function AuthLayout({
       <div className="flex items-center justify-center p-8 bg-white min-h-screen">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-10 lg:hidden">
-            <div className="w-8 h-8 rounded-lg bg-[#059669] flex items-center justify-center font-bold text-white text-sm">
-              PZ
-            </div>
-            <span className="text-lg font-semibold text-[#0F172A]">ProprietárioZen</span>
+          <div className="mb-10 lg:hidden">
+            <LogoColor iconSize={32} href="/" />
           </div>
 
           {children}

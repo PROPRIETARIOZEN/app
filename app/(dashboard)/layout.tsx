@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { MobileNav } from '@/components/dashboard/mobile-nav'
 import type { Profile } from '@/types'
+import { LogoColor } from '@/components/ui/logo'
 
 export default async function DashboardLayout({
   children,
@@ -32,12 +33,7 @@ export default async function DashboardLayout({
         {/* Header mobile */}
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b bg-background">
           <MobileNav profile={profile as Profile | null} />
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center font-bold text-white text-xs">
-              PZ
-            </div>
-            <span className="font-semibold text-sm">ProprietárioZen</span>
-          </div>
+          <LogoColor iconSize={28} href="/dashboard" />
         </header>
 
         {/* Conteúdo */}

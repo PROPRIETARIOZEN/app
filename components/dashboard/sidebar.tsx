@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase'
 import type { Profile } from '@/types'
+import { LogoWhite } from '@/components/ui/logo'
 
 const navItems = [
   { href: '/dashboard',     label: 'Dashboard',    icon: LayoutDashboard },
@@ -47,11 +48,8 @@ export function Sidebar({ profile, onClose }: SidebarProps) {
   return (
     <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="w-9 h-9 rounded-xl bg-sidebar-primary flex items-center justify-center font-bold text-white text-sm shrink-0">
-          PZ
-        </div>
-        <span className="font-semibold text-base text-white tracking-tight">ProprietárioZen</span>
+      <div className="px-5 py-5">
+        <LogoWhite iconSize={36} />
       </div>
 
       <div className="h-px bg-sidebar-border mx-3" />

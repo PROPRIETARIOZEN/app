@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { LogoColor, LogoWhite } from '@/components/ui/logo'
 
 // ─── App mockup SVG ──────────────────────────────────────────────────────────
 
@@ -183,10 +184,7 @@ export function LandingPage() {
       <header role="banner">
         <nav aria-label="Navegação principal" className="sticky top-0 z-50 bg-white/96 backdrop-blur-md border-b border-[#D1FAE5]">
           <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-            <a href="/" className="flex items-center gap-2.5 font-bold text-[#065F46] text-lg" aria-label="ProprietárioZen — página inicial">
-              <div className="w-9 h-9 rounded-xl bg-[#059669] flex items-center justify-center text-white font-black text-sm select-none" aria-hidden="true">PZ</div>
-              ProprietárioZen
-            </a>
+            <LogoColor href="/" iconSize={36} />
             <ul className="hidden md:flex items-center gap-8 list-none m-0 p-0">
               {[['#funcionalidades','Funcionalidades'],['#como-funciona','Como funciona'],['#depoimentos','Depoimentos'],['#precos','Preços']].map(([href,label]) => (
                 <li key={href}><a href={href} className="text-[#374151] hover:text-[#059669] font-medium text-sm transition-colors">{label}</a></li>
@@ -524,10 +522,7 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto px-6">
           <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr] gap-12 mb-12">
             <div>
-              <div className="flex items-center gap-2.5 font-bold text-white text-lg mb-3">
-                <div className="w-9 h-9 rounded-xl bg-[#059669] flex items-center justify-center text-white font-black text-sm" aria-hidden="true">PZ</div>
-                ProprietárioZen
-              </div>
+              <LogoWhite iconSize={36} className="mb-3" />
               <p className="text-sm leading-relaxed max-w-[260px]" style={{color:'rgba(255,255,255,0.4)'}}>
                 Software para proprietário de imóvel — gestão de imóveis simples e eficiente para proprietários brasileiros.
               </p>
