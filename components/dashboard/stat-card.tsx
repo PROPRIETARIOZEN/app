@@ -9,6 +9,7 @@ interface StatCardProps {
   icon: LucideIcon
   cor?: 'padrao' | 'verde' | 'vermelho' | 'amarelo' | 'azul'
   todoEmDia?: boolean
+  zeroText?: string
   tendencia?: { percentual: number; positivo: boolean } | null
 }
 
@@ -27,6 +28,7 @@ export function StatCard({
   icon: Icon,
   cor = 'padrao',
   todoEmDia,
+  zeroText = 'Tudo em dia',
   tendencia,
 }: StatCardProps) {
   const cores = coresMap[cor]
@@ -51,7 +53,7 @@ export function StatCard({
         {todoEmDia ? (
           <div className="flex items-center gap-1.5">
             <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
-            <span className="text-[18px] font-bold text-emerald-600 leading-none">Tudo em dia</span>
+            <span className="text-[18px] font-bold text-emerald-600 leading-none">{zeroText}</span>
           </div>
         ) : (
           <p className="text-[28px] font-bold tracking-tight text-[#0F172A] leading-none">{valor}</p>
