@@ -231,7 +231,7 @@ export function LandingPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-[#34D399] lp-blink" aria-hidden="true" />
                   Recibos PDF automáticos — novidade
                 </div>
-                <h1 id="hero-title" className="text-[52px] lg:text-[60px] font-bold text-white leading-[1.1] mb-6">
+                <h1 id="hero-title" className="text-[50px] lg:text-[58px] font-bold text-white leading-[1.1] mb-6">
                   Gestão de imóveis<br />para proprietários <span className="text-[#34D399]">sem planilha,<br />sem estresse.</span>
                 </h1>
                 <p className="text-[17px] text-white/60 mb-10 leading-[1.75] max-w-[420px]">
