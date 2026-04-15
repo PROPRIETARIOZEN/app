@@ -3,24 +3,22 @@
 require('dotenv').config()
 const { createClient } = require('./asaasClient')
 const { AsaasIntegrationError } = require('./AsaasIntegrationError')
-const AsaasAccount = require('../../models/AsaasAccount')
+const supabase = require('../../lib/supabase')
 
 // ── Configuração de webhooks ──────────────────────────────────────────────────
 
 const WEBHOOK_EVENTS = [
-  'PAYMENT_RECEIVED',       // Pagamento confirmado (Pix/Boleto)
-  'PAYMENT_OVERDUE',        // Cobrança vencida sem pagamento
-  'PAYMENT_DELETED',        // Cobrança cancelada
-  'ACCOUNT_STATUS_UPDATED', // Status da conta alterado (aprovação/rejeição)
+  'PAYMENT_RECEIVED',
+  'PAYMENT_OVERDUE',
+  'PAYMENT_DELETED',
+  'ACCOUNT_STATUS_UPDATED',
 ]
 
 /**
- * Registra os webhooks necessários na SUBCONTA do proprietário.
- * Usa a apiKey da subconta — não da conta raiz.
- *
+ * Registra os webhooks necessários na subconta do proprietário.
  * Idempotente: se o webhook já existir (409), considera sucesso silencioso.
  *
- * @param {string} asaasId    ID da subconta no Asaas
+ * @param {string} asaasId          ID da subconta no Asaas
  * @param {string} decryptedApiKey  apiKey da subconta já descriptografada
  * @returns {Promise<void>}
  */
@@ -38,67 +36,49 @@ async function setupWebhook(asaasId, decryptedApiKey) {
   const subClient = createClient(decryptedApiKey)
 
   const payload = {
-    url: webhookUrl,
-    email: null,            // Opcional: e-mail para receber notificações
-    enabled: true,
-    interrupted: false,
-    sendType: 'SEQUENTIALLY',
-    events: WEBHOOK_EVENTS,
-    authToken: process.env.ASAAS_WEBHOOK_TOKEN,
+    url:          webhookUrl,
+    email:        null,
+    enabled:      true,
+    interrupted:  false,
+    sendType:     'SEQUENTIALLY',
+    events:       WEBHOOK_EVENTS,
+    authToken:    process.env.ASAAS_WEBHOOK_TOKEN,
   }
 
   try {
     await subClient.post('/webhook', payload)
     console.info(`[Asaas] Webhook registrado para subconta ${asaasId}`)
   } catch (error) {
-    // Webhook já existente não é erro — apenas logar
     if (error.asaasCode === 'webhookAlreadyExists' || error.statusCode === 409) {
-      console.info(
-        `[Asaas] Webhook já existente para subconta ${asaasId} — nenhuma ação necessária.`,
-      )
+      console.info(`[Asaas] Webhook já existente para subconta ${asaasId} — nenhuma ação necessária.`)
       return
     }
-    // Outros erros são propagados, mas sem bloquear o onboarding
-    console.error(
-      `[Asaas] Falha ao registrar webhook para subconta ${asaasId}:`,
-      error.message,
-    )
+    console.error(`[Asaas] Falha ao registrar webhook para subconta ${asaasId}:`, error.message)
     throw error
   }
 }
 
-// ── Processamento de eventos recebidos ────────────────────────────────────────
+// ── Push notifications ────────────────────────────────────────────────────────
 
-/**
- * Envia notificação push via Firebase Admin SDK.
- * Falha silenciosa — não bloqueia o processamento do webhook.
- *
- * @param {string} userId
- * @param {string} title
- * @param {string} body
- * @param {Object} [data]  Dados extras para o app
- */
 async function sendPushNotification(userId, title, body, data = {}) {
   try {
     const admin = require('firebase-admin')
 
-    // Buscar o FCM token do usuário no banco
-    // Adaptar conforme o modelo User da aplicação
-    const User = require('../../models/User')
-    const user = await User.findById(userId).select('fcmToken')
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('fcm_token')
+      .eq('id', userId)
+      .maybeSingle()
 
-    if (!user?.fcmToken) {
+    if (!profile?.fcm_token) {
       console.debug(`[Firebase] Usuário ${userId} sem FCM token. Notificação não enviada.`)
       return
     }
 
     await admin.messaging().send({
-      token: user.fcmToken,
+      token: profile.fcm_token,
       notification: { title, body },
-      data: {
-        ...data,
-        userId: String(userId),
-      },
+      data: { ...data, userId: String(userId) },
       android: {
         priority: 'high',
         notification: { channelId: 'pagamentos' },
@@ -112,66 +92,53 @@ async function sendPushNotification(userId, title, body, data = {}) {
   }
 }
 
-/**
- * Processa evento ACCOUNT_STATUS_UPDATED.
- * Atualiza o status local e notifica o proprietário.
- *
- * @param {Object} event  Payload do Asaas
- */
+// ── Event handlers ────────────────────────────────────────────────────────────
+
 async function handleAccountStatusUpdated(event) {
   const { account } = event
-
   if (!account?.id) {
     console.warn('[Asaas Webhook] ACCOUNT_STATUS_UPDATED sem account.id')
     return
   }
 
-  const asaasAccount = await AsaasAccount.findOne({ asaasId: account.id })
-  if (!asaasAccount) {
-    console.warn(
-      `[Asaas Webhook] ACCOUNT_STATUS_UPDATED: subconta ${account.id} não encontrada.`,
-    )
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, asaas_account_status')
+    .eq('asaas_account_id', account.id)
+    .maybeSingle()
+
+  if (!profile) {
+    console.warn(`[Asaas Webhook] ACCOUNT_STATUS_UPDATED: subconta ${account.id} não encontrada.`)
     return
   }
 
-  const newStatus = account.accountStatus ?? account.status
-  const previousStatus = asaasAccount.accountStatus
+  const newStatus      = account.accountStatus ?? account.status
+  const previousStatus = profile.asaas_account_status
 
-  await AsaasAccount.updateOne(
-    { asaasId: account.id },
-    {
-      accountStatus: newStatus,
-      onboardingCompleted: newStatus === 'ACTIVE',
-      approvedAt: newStatus === 'ACTIVE' && previousStatus !== 'ACTIVE'
-        ? new Date()
-        : asaasAccount.approvedAt,
-    },
-  )
+  await supabase
+    .from('profiles')
+    .update({ asaas_account_status: newStatus })
+    .eq('id', profile.id)
 
-  console.info(
-    `[Asaas Webhook] Conta ${account.id}: ${previousStatus} → ${newStatus}`,
-  )
-
-  // Notificações por status
-  const userId = asaasAccount.userId
+  console.info(`[Asaas Webhook] Conta ${account.id}: ${previousStatus} → ${newStatus}`)
 
   if (newStatus === 'ACTIVE' && previousStatus !== 'ACTIVE') {
     await sendPushNotification(
-      userId,
+      profile.id,
       '🎉 Conta aprovada!',
       'Sua conta foi aprovada. Agora você já pode receber aluguéis diretamente.',
       { type: 'ACCOUNT_APPROVED', asaasId: account.id },
     )
   } else if (newStatus === 'REJECTED') {
     await sendPushNotification(
-      userId,
+      profile.id,
       'Conta não aprovada',
       'Sua conta Asaas não foi aprovada. Entre em contato com o suporte para mais informações.',
       { type: 'ACCOUNT_REJECTED', asaasId: account.id },
     )
   } else if (newStatus === 'BLOCKED') {
     await sendPushNotification(
-      userId,
+      profile.id,
       'Conta bloqueada',
       'Sua conta Asaas foi bloqueada temporariamente. Acesse o painel Asaas para mais detalhes.',
       { type: 'ACCOUNT_BLOCKED', asaasId: account.id },
@@ -179,148 +146,101 @@ async function handleAccountStatusUpdated(event) {
   }
 }
 
-/**
- * Processa evento PAYMENT_RECEIVED.
- * Atualiza status da cobrança no banco e notifica o proprietário.
- *
- * @param {Object} event
- */
 async function handlePaymentReceived(event) {
   const { payment } = event
-
   if (!payment?.id) {
     console.warn('[Asaas Webhook] PAYMENT_RECEIVED sem payment.id')
     return
   }
 
-  // Localizar a subconta via walletId ou asaasId
-  // A cobrança foi criada na subconta; o walletId identifica o dono
-  const asaasAccount = await AsaasAccount.findOne({
-    $or: [
-      { walletId: payment.transferredBy?.walletId },
-      { asaasId: payment.asaasAccount },
-    ],
-  })
+  // Localiza o proprietário via asaas_account_id
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .or(`asaas_account_id.eq.${payment.asaasAccount},asaas_wallet_id.eq.${payment.transferredBy?.walletId}`)
+    .maybeSingle()
 
-  if (!asaasAccount) {
-    console.warn(
-      `[Asaas Webhook] PAYMENT_RECEIVED: subconta não identificada. payment.id=${payment.id}`,
-    )
+  if (!profile) {
+    console.warn(`[Asaas Webhook] PAYMENT_RECEIVED: proprietário não identificado. payment.id=${payment.id}`)
     return
   }
 
-  console.info(
-    `[Asaas Webhook] Pagamento ${payment.id} recebido. ` +
-    `Valor: R$ ${payment.value} | Tipo: ${payment.billingType}`,
-  )
+  console.info(`[Asaas Webhook] Pagamento ${payment.id} recebido. Valor: R$ ${payment.value} | Tipo: ${payment.billingType}`)
 
-  // Atualizar o registro de aluguel no banco da aplicação
-  // Adaptar conforme o modelo de cobrança utilizado
-  try {
-    const Charge = require('../../models/Charge')
-    await Charge.findOneAndUpdate(
-      { asaasChargeId: payment.id },
-      {
-        status: 'RECEIVED',
-        paidAt: payment.paymentDate ?? new Date(),
-        paidValue: payment.value,
-      },
-    )
-  } catch {
-    // Modelo pode não existir ainda — log e continua
-    console.debug('[Asaas Webhook] Modelo Charge não encontrado. Pulando atualização local.')
-  }
+  // Atualiza o aluguel correspondente
+  await supabase
+    .from('alugueis')
+    .update({
+      status:          'pago',
+      data_pagamento:  payment.paymentDate ?? new Date().toISOString().slice(0, 10),
+      valor_pago:      payment.value,
+      metodo_pagamento: payment.billingType,
+    })
+    .eq('asaas_charge_id', payment.id)
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
+    style:    'currency',
     currency: 'BRL',
   }).format(payment.value)
 
   await sendPushNotification(
-    asaasAccount.userId,
+    profile.id,
     '💸 Aluguel recebido!',
     `Pagamento de ${valorFormatado} confirmado via ${payment.billingType === 'PIX' ? 'Pix' : 'Boleto'}.`,
-    {
-      type: 'PAYMENT_RECEIVED',
-      chargeId: payment.id,
-      value: String(payment.value),
-    },
+    { type: 'PAYMENT_RECEIVED', chargeId: payment.id, value: String(payment.value) },
   )
 }
 
-/**
- * Processa evento PAYMENT_OVERDUE.
- *
- * @param {Object} event
- */
 async function handlePaymentOverdue(event) {
   const { payment } = event
   if (!payment?.id) return
 
-  const asaasAccount = await AsaasAccount.findOne({
-    $or: [
-      { walletId: payment.transferredBy?.walletId },
-      { asaasId: payment.asaasAccount },
-    ],
-  })
-  if (!asaasAccount) return
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .or(`asaas_account_id.eq.${payment.asaasAccount},asaas_wallet_id.eq.${payment.transferredBy?.walletId}`)
+    .maybeSingle()
+
+  if (!profile) return
+
+  await supabase
+    .from('alugueis')
+    .update({ status: 'atrasado' })
+    .eq('asaas_charge_id', payment.id)
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
+    style:    'currency',
     currency: 'BRL',
   }).format(payment.value)
 
-  console.info(
-    `[Asaas Webhook] Pagamento vencido: ${payment.id} | Valor: R$ ${payment.value}`,
-  )
+  console.info(`[Asaas Webhook] Pagamento vencido: ${payment.id} | Valor: R$ ${payment.value}`)
 
   await sendPushNotification(
-    asaasAccount.userId,
+    profile.id,
     '⚠️ Aluguel em atraso',
     `Cobrança de ${valorFormatado} venceu sem pagamento. Considere notificar o inquilino.`,
-    {
-      type: 'PAYMENT_OVERDUE',
-      chargeId: payment.id,
-      value: String(payment.value),
-    },
+    { type: 'PAYMENT_OVERDUE', chargeId: payment.id, value: String(payment.value) },
   )
 }
 
-/**
- * Processa evento PAYMENT_DELETED.
- *
- * @param {Object} event
- */
 async function handlePaymentDeleted(event) {
   const { payment } = event
   if (!payment?.id) return
 
   console.info(`[Asaas Webhook] Cobrança ${payment.id} cancelada/excluída.`)
 
-  try {
-    const Charge = require('../../models/Charge')
-    await Charge.findOneAndUpdate(
-      { asaasChargeId: payment.id },
-      { status: 'DELETED', deletedAt: new Date() },
-    )
-  } catch {
-    console.debug('[Asaas Webhook] Modelo Charge não encontrado. Pulando.')
-  }
+  await supabase
+    .from('alugueis')
+    .update({ status: 'cancelado' })
+    .eq('asaas_charge_id', payment.id)
 }
 
 /**
  * Handler principal do webhook.
- * Roteia o evento para o handler correto.
- *
  * Sempre resolve (nunca rejeita) para garantir HTTP 200 ao Asaas.
- * O Asaas para as tentativas de reenvio após falhas consecutivas.
- *
- * @param {Object} event  Payload completo do webhook
- * @returns {Promise<void>}
  */
 async function handleWebhookEvent(event) {
   const { event: eventType } = event
-
   console.info(`[Asaas Webhook] Evento recebido: ${eventType}`)
 
   try {
@@ -328,25 +248,20 @@ async function handleWebhookEvent(event) {
       case 'ACCOUNT_STATUS_UPDATED':
         await handleAccountStatusUpdated(event)
         break
-
       case 'PAYMENT_RECEIVED':
       case 'PAYMENT_CONFIRMED':
         await handlePaymentReceived(event)
         break
-
       case 'PAYMENT_OVERDUE':
         await handlePaymentOverdue(event)
         break
-
       case 'PAYMENT_DELETED':
         await handlePaymentDeleted(event)
         break
-
       default:
         console.debug(`[Asaas Webhook] Evento ignorado: ${eventType}`)
     }
   } catch (err) {
-    // Logar mas não relançar — garantir sempre HTTP 200
     console.error(`[Asaas Webhook] Erro ao processar ${eventType}:`, err.message)
   }
 }
@@ -354,7 +269,6 @@ async function handleWebhookEvent(event) {
 module.exports = {
   setupWebhook,
   handleWebhookEvent,
-  // Exportados para testes
   handleAccountStatusUpdated,
   handlePaymentReceived,
   handlePaymentOverdue,

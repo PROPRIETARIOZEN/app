@@ -1,19 +1,18 @@
 'use strict'
 
 const cron = require('node-cron')
-const Contract = require('../models/Contract')
-const Tenant = require('../models/Tenant')
+const supabase = require('../lib/supabase')
 const { createMonthlyCharge } = require('../services/rentalChargeService')
 
 /**
  * Inicia o scheduler de geração automática de cobranças.
  *
  * Dispara no dia 1 de cada mês às 08:00 horário de Brasília.
- * Processa apenas contratos com billingMode=MANUAL — os contratos AUTOMATIC
- * têm suas cobranças geradas diretamente pelo Asaas via assinatura recorrente.
+ * Processa apenas imóveis com billing_mode=MANUAL e ativo=true — os imóveis
+ * AUTOMATIC têm cobranças geradas diretamente pelo Asaas via assinatura recorrente.
  *
  * A função é idempotente por design: mesmo que rode duas vezes no mesmo dia,
- * o createMonthlyCharge não cria duplicatas (índice único contractId+referenceMonth).
+ * createMonthlyCharge não cria duplicatas (índice único imovel_id+mes_referencia).
  */
 function startChargeScheduler() {
   cron.schedule('0 8 1 * *', async () => {
@@ -21,33 +20,49 @@ function startChargeScheduler() {
     const referenceMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     console.info(`[Scheduler] Iniciando geração de cobranças — ${referenceMonth}`)
 
-    let contracts
+    let imoveis
     try {
-      contracts = await Contract.find({ isActive: true, billingMode: 'MANUAL' })
+      const { data, error } = await supabase
+        .from('imoveis')
+        .select('*')
+        .eq('ativo', true)
+        .eq('billing_mode', 'MANUAL')
+
+      if (error) throw error
+      imoveis = data
     } catch (err) {
-      console.error('[Scheduler] Falha ao buscar contratos:', err.message)
+      console.error('[Scheduler] Falha ao buscar imóveis:', err.message)
       return
     }
 
-    console.info(`[Scheduler] ${contracts.length} contrato(s) MANUAL a processar.`)
+    console.info(`[Scheduler] ${imoveis.length} imóvel(is) MANUAL a processar.`)
 
     let successCount = 0
-    let errorCount = 0
+    let errorCount   = 0
 
-    for (const contract of contracts) {
+    for (const imovel of imoveis) {
       try {
-        const tenant = await Tenant.findById(contract.tenantId).select('+asaasCustomerIds')
-        if (!tenant) {
-          console.error(`[Scheduler] Inquilino não encontrado — contrato ${contract._id}`)
+        // Busca o inquilino ativo vinculado ao imóvel
+        const { data: inquilino, error: tenantErr } = await supabase
+          .from('inquilinos')
+          .select('*')
+          .eq('imovel_id', imovel.id)
+          .eq('ativo', true)
+          .maybeSingle()
+
+        if (tenantErr) throw tenantErr
+
+        if (!inquilino) {
+          console.error(`[Scheduler] Inquilino não encontrado — imóvel ${imovel.id}`)
           errorCount++
           continue
         }
 
-        await createMonthlyCharge(contract, tenant, referenceMonth)
+        await createMonthlyCharge(imovel, inquilino, referenceMonth)
         successCount++
       } catch (err) {
         errorCount++
-        console.error(`[Scheduler] Erro no contrato ${contract._id}:`, err.message)
+        console.error(`[Scheduler] Erro no imóvel ${imovel.id}:`, err.message)
       }
     }
 

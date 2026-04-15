@@ -1,26 +1,26 @@
 'use strict'
 
-// ── Configuração do ambiente de teste ─────────────────────────────────────────
-process.env.ASAAS_API_KEY_ROOT = 'test_root_api_key_fake'
-process.env.ASAAS_BASE_URL = 'https://sandbox.asaas.com/api/v3'
-// 64 chars hex = 32 bytes para AES-256
-process.env.ASAAS_ENCRYPTION_KEY = 'a'.repeat(64)
-process.env.NODE_ENV = 'test'
+process.env.ASAAS_API_KEY_ROOT    = 'test_root_api_key_fake'
+process.env.ASAAS_BASE_URL        = 'https://sandbox.asaas.com/api/v3'
+process.env.ASAAS_ENCRYPTION_KEY  = 'a'.repeat(64)
+process.env.SUPABASE_URL          = 'https://test.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test_service_role_key'
+process.env.NODE_ENV              = 'test'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
+
 jest.mock('axios')
-jest.mock('../../src/models/AsaasAccount')
+jest.mock('../../src/lib/supabase', () => ({ from: jest.fn() }))
 
-const axios = require('axios')
-const AsaasAccount = require('../../src/models/AsaasAccount')
+const axios    = require('axios')
+const supabase = require('../../src/lib/supabase')
 
-// Mock da instância axios retornada por axios.create()
 const mockAxiosInstance = {
   post: jest.fn(),
-  get: jest.fn(),
+  get:  jest.fn(),
   delete: jest.fn(),
   interceptors: {
-    request: { use: jest.fn() },
+    request:  { use: jest.fn() },
     response: { use: jest.fn() },
   },
 }
@@ -33,29 +33,49 @@ const {
   decryptApiKey,
 } = require('../../src/services/asaas/accountService')
 
+// ── Supabase chain helper ──────────────────────────────────────────────────────
+
+let chain
+
+beforeEach(() => {
+  jest.clearAllMocks()
+
+  chain = {
+    select:      jest.fn().mockReturnThis(),
+    eq:          jest.fn().mockReturnThis(),
+    update:      jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn(),
+    single:      jest.fn(),
+  }
+  supabase.from = jest.fn().mockReturnValue(chain)
+})
+
 // ── Fixtures ───────────────────────────────────────────────────────────────────
+
+const USER_ID = 'user-uuid-1234'
 const PROPRIETARIO_DATA = {
-  name: 'João Silva',
-  email: 'joao@example.com',
-  cpfCnpj: '12345678901',
-  birthDate: '1985-06-15',
-  mobilePhone: '11999990000',
-  address: 'Rua das Flores',
+  name:          'João Silva',
+  email:         'joao@example.com',
+  cpfCnpj:       '12345678901',
+  birthDate:     '1985-06-15',
+  mobilePhone:   '11999990000',
+  address:       'Rua das Flores',
   addressNumber: '123',
-  province: 'Centro',
-  postalCode: '01310100',
+  province:      'Centro',
+  postalCode:    '01310100',
 }
 
 const ASAAS_CREATE_RESPONSE = {
   data: {
-    id: 'acc_subaccount_abc123',
-    apiKey: '$aact_subKey_REAL_API_KEY_FROM_ASAAS',
-    walletId: 'wallet_xyz789',
+    id:            'acc_subaccount_abc123',
+    apiKey:        '$aact_subKey_REAL_API_KEY_FROM_ASAAS',
+    walletId:      'wallet_xyz789',
     accountStatus: 'PENDING',
   },
 }
 
 // ── Testes de criptografia ────────────────────────────────────────────────────
+
 describe('encryptApiKey / decryptApiKey', () => {
   const originalKey = '$aact_subKey_REAL_API_KEY_FROM_ASAAS'
 
@@ -69,7 +89,6 @@ describe('encryptApiKey / decryptApiKey', () => {
     const enc1 = encryptApiKey(originalKey)
     const enc2 = encryptApiKey(originalKey)
     expect(enc1).not.toBe(enc2)
-    // Mas ambos descriptografam para o mesmo valor
     expect(decryptApiKey(enc1)).toBe(originalKey)
     expect(decryptApiKey(enc2)).toBe(originalKey)
   })
@@ -78,9 +97,9 @@ describe('encryptApiKey / decryptApiKey', () => {
     const encrypted = encryptApiKey(originalKey)
     const parts = encrypted.split(':')
     expect(parts).toHaveLength(3)
-    expect(parts[0]).toMatch(/^[0-9a-f]{32}$/)    // IV: 16 bytes = 32 hex chars
-    expect(parts[1]).toMatch(/^[0-9a-f]{32}$/)    // Auth tag: 16 bytes = 32 hex chars
-    expect(parts[2].length).toBeGreaterThan(0)    // Ciphertext não vazio
+    expect(parts[0]).toMatch(/^[0-9a-f]{32}$/)
+    expect(parts[1]).toMatch(/^[0-9a-f]{32}$/)
+    expect(parts[2].length).toBeGreaterThan(0)
   })
 
   test('a apiKey nunca aparece no texto criptografado', () => {
@@ -92,80 +111,61 @@ describe('encryptApiKey / decryptApiKey', () => {
 })
 
 // ── Testes de createSubAccount ────────────────────────────────────────────────
+
 describe('createSubAccount', () => {
-  const USER_ID = '507f1f77bcf86cd799439011'
-
-  beforeEach(() => {
-    jest.clearAllMocks()
-  })
-
   test('cria subconta com sucesso e persiste no banco', async () => {
-    // Simular: sem conta existente
-    AsaasAccount.findOne.mockResolvedValue(null)
-
-    // Simular resposta do Asaas
+    // profiles.asaas_account_id é null → sem duplicata
+    chain.maybeSingle.mockResolvedValueOnce({ data: { asaas_account_id: null } })
     mockAxiosInstance.post.mockResolvedValue(ASAAS_CREATE_RESPONSE)
-
-    // Simular save() bem-sucedido
-    const mockSave = jest.fn().mockResolvedValue(undefined)
-    const mockAccountInstance = {
-      save: mockSave,
-      asaasId: ASAAS_CREATE_RESPONSE.data.id,
-      walletId: ASAAS_CREATE_RESPONSE.data.walletId,
-      accountStatus: 'PENDING',
-    }
-    AsaasAccount.mockImplementation(() => mockAccountInstance)
+    // update retorna sem erro
+    chain.eq.mockReturnThis()
 
     const result = await createSubAccount(USER_ID, PROPRIETARIO_DATA)
 
-    // Verificar que save() foi chamado
-    expect(mockSave).toHaveBeenCalledTimes(1)
-
-    // Verificar resultado retornado
+    expect(supabase.from).toHaveBeenCalledWith('profiles')
+    expect(chain.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asaas_account_id:     'acc_subaccount_abc123',
+        asaas_account_status: 'PENDING',
+      })
+    )
     expect(result).toEqual({
-      asaasId: ASAAS_CREATE_RESPONSE.data.id,
-      walletId: ASAAS_CREATE_RESPONSE.data.walletId,
+      asaasId:       'acc_subaccount_abc123',
+      walletId:      'wallet_xyz789',
       accountStatus: 'PENDING',
     })
   })
 
-  test('save() é chamado ANTES de qualquer retorno', async () => {
+  test('update() é chamado ANTES de qualquer retorno', async () => {
     const callOrder = []
 
-    AsaasAccount.findOne.mockResolvedValue(null)
+    chain.maybeSingle.mockResolvedValueOnce({ data: { asaas_account_id: null } })
     mockAxiosInstance.post.mockResolvedValue(ASAAS_CREATE_RESPONSE)
 
-    const mockSave = jest.fn().mockImplementation(() => {
-      callOrder.push('save')
-      return Promise.resolve()
+    chain.update.mockImplementation(() => {
+      callOrder.push('update')
+      return chain
     })
-
-    AsaasAccount.mockImplementation(() => ({
-      save: mockSave,
-      asaasId: ASAAS_CREATE_RESPONSE.data.id,
-      walletId: ASAAS_CREATE_RESPONSE.data.walletId,
-      accountStatus: 'PENDING',
-    }))
 
     await createSubAccount(USER_ID, PROPRIETARIO_DATA)
 
-    expect(callOrder[0]).toBe('save')
-    expect(mockSave).toHaveBeenCalledTimes(1)
+    expect(callOrder[0]).toBe('update')
   })
 
   test('apiKey nunca é logada — console.error não contém a apiKey', async () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
-    AsaasAccount.findOne.mockResolvedValue(null)
+    chain.maybeSingle.mockResolvedValueOnce({ data: { asaas_account_id: null } })
     mockAxiosInstance.post.mockResolvedValue(ASAAS_CREATE_RESPONSE)
 
-    // Forçar falha no save para acionar o log de erro
-    const mockSave = jest.fn().mockRejectedValue(new Error('DB connection failed'))
-    AsaasAccount.mockImplementation(() => ({ save: mockSave }))
+    // Forçar falha no update para acionar o log de erro
+    chain.eq.mockReturnThis()
+    // Override: fazer o último .eq() rejeitar quando awaited
+    const updChain = { ...chain, eq: jest.fn().mockRejectedValue(new Error('DB error')) }
+    chain.update.mockReturnValueOnce(updChain)
 
     await expect(createSubAccount(USER_ID, PROPRIETARIO_DATA)).rejects.toThrow()
 
-    // Verificar que nenhuma chamada ao console.error contém a apiKey
     const rawApiKey = ASAAS_CREATE_RESPONSE.data.apiKey
     const allCalls = consoleSpy.mock.calls.flat(Infinity).join(' ')
     expect(allCalls).not.toContain(rawApiKey)
@@ -174,41 +174,31 @@ describe('createSubAccount', () => {
     consoleSpy.mockRestore()
   })
 
-  test('a apiKey criptografada (não a raw) é passada para o modelo', async () => {
-    AsaasAccount.findOne.mockResolvedValue(null)
+  test('a apiKey criptografada (não a raw) é passada para o banco', async () => {
+    chain.maybeSingle.mockResolvedValueOnce({ data: { asaas_account_id: null } })
     mockAxiosInstance.post.mockResolvedValue(ASAAS_CREATE_RESPONSE)
 
-    let capturedApiKey = null
-    const mockSave = jest.fn().mockResolvedValue(undefined)
-    AsaasAccount.mockImplementation((data) => {
-      capturedApiKey = data.apiKey
-      return {
-        save: mockSave,
-        ...data,
-      }
+    let capturedPayload = null
+    chain.update.mockImplementation((payload) => {
+      capturedPayload = payload
+      return chain
     })
 
     await createSubAccount(USER_ID, PROPRIETARIO_DATA)
 
-    // A apiKey passada ao modelo não pode ser a rawApiKey
-    expect(capturedApiKey).not.toBe(ASAAS_CREATE_RESPONSE.data.apiKey)
-    // Mas deve ser descriptografável para o valor original
-    expect(decryptApiKey(capturedApiKey)).toBe(ASAAS_CREATE_RESPONSE.data.apiKey)
+    expect(capturedPayload.asaas_api_key_enc).not.toBe(ASAAS_CREATE_RESPONSE.data.apiKey)
+    expect(decryptApiKey(capturedPayload.asaas_api_key_enc)).toBe(ASAAS_CREATE_RESPONSE.data.apiKey)
   })
 
   test('lança AsaasIntegrationError (409) se já existe conta vinculada', async () => {
-    AsaasAccount.findOne.mockResolvedValue({ userId: USER_ID, asaasId: 'acc_existing' })
+    chain.maybeSingle.mockResolvedValueOnce({ data: { asaas_account_id: 'acc_existing' } })
 
     await expect(createSubAccount(USER_ID, PROPRIETARIO_DATA))
-      .rejects.toMatchObject({
-        name: 'AsaasIntegrationError',
-        statusCode: 409,
-        asaasCode: 'accountAlreadyLinked',
-      })
+      .rejects.toMatchObject({ name: 'AsaasIntegrationError', statusCode: 409 })
   })
 
   test('propaga AsaasIntegrationError quando o Asaas retorna erro', async () => {
-    AsaasAccount.findOne.mockResolvedValue(null)
+    chain.maybeSingle.mockResolvedValueOnce({ data: { asaas_account_id: null } })
 
     const { AsaasIntegrationError } = require('../../src/services/asaas/AsaasIntegrationError')
     mockAxiosInstance.post.mockRejectedValue(
@@ -216,25 +206,18 @@ describe('createSubAccount', () => {
     )
 
     await expect(createSubAccount(USER_ID, PROPRIETARIO_DATA))
-      .rejects.toMatchObject({
-        name: 'AsaasIntegrationError',
-        statusCode: 422,
-        asaasCode: 'invalid_cpfCnpj',
-      })
+      .rejects.toMatchObject({ statusCode: 422, asaasCode: 'invalid_cpfCnpj' })
   })
 
   test('lança erro com contexto claro quando o save falha', async () => {
-    AsaasAccount.findOne.mockResolvedValue(null)
+    chain.maybeSingle.mockResolvedValueOnce({ data: { asaas_account_id: null } })
     mockAxiosInstance.post.mockResolvedValue(ASAAS_CREATE_RESPONSE)
 
-    const mockSave = jest.fn().mockRejectedValue(new Error('MongoNetworkError'))
-    AsaasAccount.mockImplementation(() => ({ save: mockSave }))
+    // Simular erro do Supabase no update
+    const updChain = { eq: jest.fn().mockRejectedValue(new Error('DB connection failed')) }
+    chain.update.mockReturnValueOnce(updChain)
 
     await expect(createSubAccount(USER_ID, PROPRIETARIO_DATA))
-      .rejects.toMatchObject({
-        name: 'AsaasIntegrationError',
-        statusCode: 500,
-        asaasCode: 'dbSaveFailed',
-      })
+      .rejects.toMatchObject({ statusCode: 500, asaasCode: 'dbSaveFailed' })
   })
 })

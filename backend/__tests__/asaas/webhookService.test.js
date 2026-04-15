@@ -1,23 +1,25 @@
 'use strict'
 
-process.env.ASAAS_API_KEY_ROOT = 'test_root_api_key'
-process.env.ASAAS_BASE_URL = 'https://sandbox.asaas.com/api/v3'
-process.env.ASAAS_ENCRYPTION_KEY = 'b'.repeat(64)
-process.env.WEBHOOK_BASE_URL = 'https://abc123.ngrok.io'
-process.env.ASAAS_WEBHOOK_TOKEN = 'test_webhook_token_abc'
-process.env.NODE_ENV = 'test'
+process.env.ASAAS_API_KEY_ROOT        = 'test_root_api_key'
+process.env.ASAAS_BASE_URL            = 'https://sandbox.asaas.com/api/v3'
+process.env.ASAAS_ENCRYPTION_KEY      = 'b'.repeat(64)
+process.env.WEBHOOK_BASE_URL          = 'https://abc123.ngrok.io'
+process.env.ASAAS_WEBHOOK_TOKEN       = 'test_webhook_token_abc'
+process.env.SUPABASE_URL              = 'https://test.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test_service_role_key'
+process.env.NODE_ENV                  = 'test'
 
 jest.mock('axios')
-jest.mock('../../src/models/AsaasAccount')
+jest.mock('../../src/lib/supabase', () => ({ from: jest.fn() }))
 
-const axios = require('axios')
-const AsaasAccount = require('../../src/models/AsaasAccount')
+const axios    = require('axios')
+const supabase = require('../../src/lib/supabase')
 
 const mockAxiosInstance = {
   post: jest.fn(),
-  get: jest.fn(),
+  get:  jest.fn(),
   interceptors: {
-    request: { use: jest.fn() },
+    request:  { use: jest.fn() },
     response: { use: jest.fn() },
   },
 }
@@ -26,10 +28,11 @@ axios.create.mockReturnValue(mockAxiosInstance)
 const { setupWebhook } = require('../../src/services/asaas/webhookService')
 
 // ── Testes de setupWebhook ────────────────────────────────────────────────────
+
 describe('setupWebhook', () => {
-  const ASAAS_ID = 'acc_subaccount_abc123'
+  const ASAAS_ID        = 'acc_subaccount_abc123'
   const DECRYPTED_SUBKEY = '$aact_subKey_DECRYPTED_FOR_TEST'
-  const ROOT_KEY = process.env.ASAAS_API_KEY_ROOT
+  const ROOT_KEY        = process.env.ASAAS_API_KEY_ROOT
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -39,18 +42,13 @@ describe('setupWebhook', () => {
   test('usa a apiKey da subconta — NÃO a conta raiz', async () => {
     await setupWebhook(ASAAS_ID, DECRYPTED_SUBKEY)
 
-    // axios.create deve ter sido chamado com a subconta key
     expect(axios.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        headers: expect.objectContaining({
-          access_token: DECRYPTED_SUBKEY,
-        }),
+        headers: expect.objectContaining({ access_token: DECRYPTED_SUBKEY }),
       }),
     )
 
-    // Nunca deve usar a root key para webhooks
-    const calls = axios.create.mock.calls
-    const usedKeys = calls.map(c => c[0]?.headers?.access_token)
+    const usedKeys = axios.create.mock.calls.map(c => c[0]?.headers?.access_token)
     expect(usedKeys).not.toContain(ROOT_KEY)
   })
 
@@ -60,7 +58,7 @@ describe('setupWebhook', () => {
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       '/webhook',
       expect.objectContaining({
-        url: 'https://abc123.ngrok.io/api/webhooks/asaas',
+        url:     'https://abc123.ngrok.io/api/webhooks/asaas',
         enabled: true,
       }),
     )

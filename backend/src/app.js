@@ -2,7 +2,6 @@
 
 require('dotenv').config()
 const express = require('express')
-const mongoose = require('mongoose')
 
 const asaasRoutes = require('./routes/asaas')
 const webhookRoutes = require('./routes/webhooks')
@@ -29,10 +28,7 @@ app.use((err, _req, res, _next) => {
 })
 
 // ── Inicialização ─────────────────────────────────────────────────────────────
-async function start() {
-  await mongoose.connect(process.env.MONGODB_URI)
-  console.info('[MongoDB] Conectado.')
-
+function start() {
   if (process.env.NODE_ENV !== 'test') {
     startChargeScheduler()
   }
@@ -44,10 +40,7 @@ async function start() {
 }
 
 if (require.main === module) {
-  start().catch(err => {
-    console.error('[Server] Falha ao iniciar:', err)
-    process.exit(1)
-  })
+  start()
 }
 
 module.exports = app

@@ -4,18 +4,16 @@ require('dotenv').config()
 const crypto = require('crypto')
 const { rootClient, createClient } = require('./asaasClient')
 const { AsaasIntegrationError } = require('./AsaasIntegrationError')
-const AsaasAccount = require('../../models/AsaasAccount')
+const supabase = require('../../lib/supabase')
 
 // ── Constantes de criptografia ────────────────────────────────────────────────
 const CIPHER_ALGORITHM = 'aes-256-gcm'
-const IV_LENGTH = 16    // bytes
-const TAG_LENGTH = 16   // bytes (GCM auth tag)
+const IV_LENGTH = 16
+const TAG_LENGTH = 16
 
 /**
  * Retorna a chave de criptografia como Buffer de 32 bytes a partir
  * de ASAAS_ENCRYPTION_KEY (64 chars hex).
- *
- * @returns {Buffer}
  */
 function getEncryptionKey() {
   const keyHex = process.env.ASAAS_ENCRYPTION_KEY
@@ -31,9 +29,6 @@ function getEncryptionKey() {
 /**
  * Criptografa uma string com AES-256-GCM.
  * Retorna: "<iv_hex>:<authTag_hex>:<ciphertext_hex>"
- *
- * O IV é gerado aleatoriamente a cada chamada para que dois
- * valores idênticos produzam ciphertexts diferentes.
  *
  * @param {string} plaintext
  * @returns {string}
@@ -60,7 +55,7 @@ function encryptApiKey(plaintext) {
  * Descriptografa uma string produzida por encryptApiKey.
  *
  * @param {string} encryptedText  Formato: "<iv_hex>:<authTag_hex>:<ciphertext_hex>"
- * @returns {string}  Plaintext original
+ * @returns {string}
  */
 function decryptApiKey(encryptedText) {
   const parts = encryptedText.split(':')
@@ -86,29 +81,22 @@ function decryptApiKey(encryptedText) {
  * Cria uma subconta Asaas para o proprietário e persiste no banco.
  *
  * ATENÇÃO: a apiKey é retornada UMA ÚNICA VEZ pelo Asaas.
- * O save() no banco é garantido ANTES de qualquer outro processamento.
+ * O save no banco é garantido ANTES de qualquer outro processamento.
  *
- * @param {string} userId  ObjectId do proprietário no sistema
+ * @param {string} userId  UUID do proprietário (profiles.id)
  * @param {Object} data    Dados do proprietário
- * @param {string} data.name
- * @param {string} data.email
- * @param {string} data.cpfCnpj          Apenas dígitos (sem pontos/traços)
- * @param {string} data.birthDate        Formato YYYY-MM-DD (obrigatório para PF)
- * @param {string} [data.phone]          Fixo com DDD
- * @param {string} data.mobilePhone      Celular com DDD
- * @param {string} data.address          Logradouro
- * @param {string} data.addressNumber
- * @param {string} data.province         Bairro
- * @param {string} data.postalCode       CEP (apenas dígitos)
- * @param {string} [data.companyType]    MEI | LTDA | SA | INDIVIDUAL (apenas PJ)
- *
  * @returns {Promise<{ asaasId: string, walletId: string, accountStatus: string }>}
  * @throws {AsaasIntegrationError}
  */
 async function createSubAccount(userId, data) {
   // ── 1. Verificar duplicata ────────────────────────────────────────────────
-  const existing = await AsaasAccount.findOne({ userId })
-  if (existing) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('asaas_account_id')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profile?.asaas_account_id) {
     throw new AsaasIntegrationError(
       'Este proprietário já possui uma conta Asaas vinculada.',
       409,
@@ -117,28 +105,21 @@ async function createSubAccount(userId, data) {
   }
 
   // ── 2. Montar payload para o Asaas ───────────────────────────────────────
-  //
-  // Migração White Label: adicionar `loginEmailSmtp: data.email` aqui.
-  // Isso instrui o Asaas a enviar o e-mail de boas-vindas pelo domínio
-  // White Label em vez do domínio padrão asaas.com.
-  // Ver ASAAS_INTEGRATION.md → seção "Migração para White Label".
-  //
   const payload = {
-    name: data.name,
-    email: data.email,
-    cpfCnpj: data.cpfCnpj,
-    birthDate: data.birthDate ?? undefined,
-    phone: data.phone ?? undefined,
+    name:        data.name,
+    email:       data.email,
+    cpfCnpj:     data.cpfCnpj,
+    birthDate:   data.birthDate ?? undefined,
+    phone:       data.phone ?? undefined,
     mobilePhone: data.mobilePhone,
-    address: data.address,
+    address:     data.address,
     addressNumber: data.addressNumber,
-    province: data.province,
-    postalCode: data.postalCode,
+    province:    data.province,
+    postalCode:  data.postalCode,
     companyType: data.companyType ?? undefined,
   }
 
   // ── 3. Chamar POST /accounts ──────────────────────────────────────────────
-  // Erros são convertidos em AsaasIntegrationError pelo interceptor do cliente.
   const response = await rootClient.post('/accounts', payload)
   const { id: asaasId, apiKey: rawApiKey, walletId } = response.data
 
@@ -151,32 +132,26 @@ async function createSubAccount(userId, data) {
   }
 
   // ── 4. Criptografar a apiKey ANTES de qualquer outro processamento ────────
-  //
-  // Crítico: se o save falhar por qualquer motivo (conexão, validação),
-  // a apiKey é perdida para sempre. Não há outro endpoint para recuperá-la.
-  // O bloco try/catch garante que o erro seja propagado com contexto claro.
-  //
   const encryptedApiKey = encryptApiKey(rawApiKey)
 
   // ── 5. Persistir no banco ─────────────────────────────────────────────────
-  let account
   try {
-    account = new AsaasAccount({
-      userId,
-      asaasId,
-      apiKey: encryptedApiKey,
-      walletId: walletId ?? null,
-      accountStatus: 'PENDING',
-      onboardingCompleted: false,
-    })
-    await account.save()
-  } catch (dbError) {
-    // A apiKey foi gerada mas não salva. Logar o asaasId para auditoria
-    // (NÃO logar a rawApiKey).
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .update({
+        asaas_account_id:     asaasId,
+        asaas_api_key_enc:    encryptedApiKey,
+        asaas_wallet_id:      walletId ?? null,
+        asaas_account_status: 'PENDING',
+      })
+      .eq('id', userId)
+
+    if (dbError) throw dbError
+  } catch (dbErr) {
     console.error(
       '[Asaas] CRÍTICO: subconta criada mas falhou ao persistir no banco. ' +
       `asaasId=${asaasId} userId=${userId}`,
-      dbError.message,
+      dbErr.message,
     )
     throw new AsaasIntegrationError(
       'Conta criada no Asaas mas falhou ao salvar no banco. ' +
@@ -186,24 +161,27 @@ async function createSubAccount(userId, data) {
     )
   }
 
-  // rawApiKey sai de escopo aqui — não é retornada nem logada
   return {
-    asaasId: account.asaasId,
-    walletId: account.walletId,
-    accountStatus: account.accountStatus,
+    asaasId,
+    walletId: walletId ?? null,
+    accountStatus: 'PENDING',
   }
 }
 
 /**
  * Consulta o status atual da subconta no Asaas.
- * Usa a apiKey descriptografada da subconta (não da conta raiz).
  *
- * @param {string} userId  ObjectId do proprietário
+ * @param {string} userId  UUID do proprietário
  * @returns {Promise<{ commercialInfoStatus: string, accountStatus: string }>}
  */
 async function getAccountStatus(userId) {
-  const account = await AsaasAccount.findOne({ userId }).select('+apiKey')
-  if (!account) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('asaas_account_id, asaas_api_key_enc, asaas_account_status')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!profile?.asaas_account_id) {
     throw new AsaasIntegrationError(
       'Nenhuma conta Asaas vinculada para este usuário.',
       404,
@@ -211,22 +189,17 @@ async function getAccountStatus(userId) {
     )
   }
 
-  const decryptedKey = decryptApiKey(account.apiKey)
+  const decryptedKey = decryptApiKey(profile.asaas_api_key_enc)
   const subClient = createClient(decryptedKey)
 
   const response = await subClient.get('/myAccount/status')
   const { commercialInfoStatus, accountStatus } = response.data
 
-  // Sincronizar o status local se mudou
-  if (accountStatus && account.accountStatus !== accountStatus) {
-    await AsaasAccount.updateOne(
-      { userId },
-      {
-        accountStatus,
-        onboardingCompleted: accountStatus === 'ACTIVE',
-        approvedAt: accountStatus === 'ACTIVE' ? new Date() : account.approvedAt,
-      },
-    )
+  if (accountStatus && profile.asaas_account_status !== accountStatus) {
+    await supabase
+      .from('profiles')
+      .update({ asaas_account_status: accountStatus })
+      .eq('id', userId)
   }
 
   return { commercialInfoStatus, accountStatus }
@@ -240,22 +213,27 @@ async function getAccountStatus(userId) {
  * @returns {Promise<string>}
  */
 async function getDecryptedApiKey(userId) {
-  const account = await AsaasAccount.findOne({ userId }).select('+apiKey')
-  if (!account) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('asaas_api_key_enc')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!profile?.asaas_api_key_enc) {
     throw new AsaasIntegrationError(
       'Conta Asaas não encontrada para este usuário.',
       404,
       'accountNotFound',
     )
   }
-  return decryptApiKey(account.apiKey)
+
+  return decryptApiKey(profile.asaas_api_key_enc)
 }
 
 module.exports = {
   createSubAccount,
   getAccountStatus,
   getDecryptedApiKey,
-  // Exportados para uso nos testes unitários
   encryptApiKey,
   decryptApiKey,
 }

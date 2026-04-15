@@ -1,8 +1,6 @@
 'use strict'
 
-const Tenant = require('../models/Tenant')
-const Contract = require('../models/Contract')
-const RentalCharge = require('../models/RentalCharge')
+const supabase = require('../lib/supabase')
 const {
   upsertCustomer,
   createCharge,
@@ -13,254 +11,331 @@ const {
 } = require('./asaas/chargeService')
 const { sendChargeCreatedEmail } = require('./emailService')
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function notFound(msg) {
+  const err = new Error(msg)
+  err.statusCode = 404
+  return err
+}
+
+function conflict(msg) {
+  const err = new Error(msg)
+  err.statusCode = 409
+  return err
+}
+
 /**
- * Garante que o inquilino existe como customer na subconta do proprietário.
- * O asaasCustomerId é cacheado no Tenant.asaasCustomerIds para evitar buscas
- * repetidas ao Asaas — o mesmo inquilino pode ter IDs distintos em cada subconta.
- *
- * @param {Object} contract  Documento Contract populado
- * @param {Object} tenant    Documento Tenant com asaasCustomerIds selecionado
- * @returns {Promise<string>}  asaasCustomerId nesta subconta
+ * Converte YYYY-MM em uma data PostgreSQL (primeiro dia do mês: YYYY-MM-01).
+ * A coluna mes_referencia é do tipo date e armazena sempre o dia 1.
  */
-async function createOrGetCustomer(contract, tenant) {
-  const landlordKey = String(contract.landlordId)
-  const cached = tenant.asaasCustomerIds?.get(landlordKey)
-  if (cached) return cached
+function referenceMonthToDate(referenceMonth) {
+  return `${referenceMonth}-01`
+}
 
-  const customer = await upsertCustomer(String(contract.landlordId), {
-    name: tenant.name,
-    cpfCnpj: tenant.cpfCnpj,
-    email: tenant.email,
-    mobilePhone: tenant.mobilePhone,
-    ...(tenant.phone ? { phone: tenant.phone } : {}),
+/**
+ * Converte a data PostgreSQL mes_referencia de volta para YYYY-MM.
+ */
+function dateToReferenceMonth(dateStr) {
+  return String(dateStr).substring(0, 7)
+}
+
+// ── Mapeamento de status ──────────────────────────────────────────────────────
+
+const ASAAS_STATUS_MAP = {
+  PENDING:          'pendente',
+  CONFIRMED:        'pago',
+  RECEIVED:         'pago',
+  OVERDUE:          'atrasado',
+  REFUNDED:         'estornado',
+  REFUND_REQUESTED: 'estornado',
+  CANCELLED:        'cancelado',
+  DELETED:          'cancelado',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// createOrGetCustomer
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Garante que o inquilino existe como customer na subconta Asaas do proprietário.
+ * O asaas_customer_id é cacheado em inquilinos.asaas_customer_id.
+ *
+ * @param {Object} imovel     Linha de imoveis (contém user_id = landlordId)
+ * @param {Object} inquilino  Linha de inquilinos
+ * @returns {Promise<string>} asaasCustomerId
+ */
+async function createOrGetCustomer(imovel, inquilino) {
+  if (inquilino.asaas_customer_id) return inquilino.asaas_customer_id
+
+  const customer = await upsertCustomer(imovel.user_id, {
+    name: inquilino.nome,
+    cpfCnpj: inquilino.cpf,
+    email: inquilino.email,
+    mobilePhone: inquilino.telefone,
+    ...(inquilino.telefone_fixo ? { phone: inquilino.telefone_fixo } : {}),
   })
 
-  // Persiste o ID para evitar chamadas redundantes ao Asaas
-  await Tenant.findByIdAndUpdate(tenant._id, {
-    $set: { [`asaasCustomerIds.${landlordKey}`]: customer.id },
-  })
+  await supabase
+    .from('inquilinos')
+    .update({ asaas_customer_id: customer.id })
+    .eq('id', inquilino.id)
 
   return customer.id
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// createMonthlyCharge
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Cria uma cobrança avulsa para um mês específico de aluguel.
- * Idempotente: retorna a cobrança existente se já houver uma para o mesmo contrato+mês.
+ * Idempotente: retorna a linha existente se já houver uma para o mesmo imovel+mês.
  *
- * @param {Object} contract       Documento Contract
- * @param {Object} tenant         Documento Tenant com asaasCustomerIds selecionado
+ * @param {Object} imovel         Linha de imoveis
+ * @param {Object} inquilino      Linha de inquilinos
  * @param {string} referenceMonth Formato YYYY-MM
- * @returns {Promise<Object>}     Documento RentalCharge
+ * @returns {Promise<Object>}     Linha de alugueis
  */
-async function createMonthlyCharge(contract, tenant, referenceMonth) {
-  // Idempotência via índice único { contractId, referenceMonth }
-  const existing = await RentalCharge.findOne({
-    contractId: contract._id,
-    referenceMonth,
-  })
+async function createMonthlyCharge(imovel, inquilino, referenceMonth) {
+  const mesReferencia = referenceMonthToDate(referenceMonth)
+
+  // Idempotência via índice único (imovel_id, mes_referencia)
+  const { data: existing } = await supabase
+    .from('alugueis')
+    .select('*')
+    .eq('imovel_id', imovel.id)
+    .eq('mes_referencia', mesReferencia)
+    .maybeSingle()
+
   if (existing) return existing
 
-  const asaasCustomerId = await createOrGetCustomer(contract, tenant)
+  const asaasCustomerId = await createOrGetCustomer(imovel, inquilino)
 
   const [year, month] = referenceMonth.split('-').map(Number)
   const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
     .format(new Date(year, month - 1, 1))
-  const dueDate = `${referenceMonth}-${String(contract.dueDay).padStart(2, '0')}`
+  const dueDate = `${referenceMonth}-${String(imovel.dia_vencimento).padStart(2, '0')}`
 
   const chargePayload = {
     customer: asaasCustomerId,
     billingType: 'UNDEFINED',
-    value: contract.rentAmount,
+    value: imovel.valor_aluguel,
     dueDate,
-    description: `Aluguel referente a ${monthName} — ${contract.propertyAddress}`,
-    externalReference: `${contract._id}-${referenceMonth}`,
-    fine: { value: contract.finePercent },
-    interest: { value: contract.interestPercent },
-    ...(contract.discountPercent > 0
-      ? { discount: { value: contract.discountPercent, type: 'PERCENTAGE', dueDateLimitDays: 0 } }
+    description: `Aluguel referente a ${monthName} — ${imovel.endereco}`,
+    externalReference: `${imovel.id}-${referenceMonth}`,
+    fine: { value: imovel.multa_percentual ?? 2 },
+    interest: { value: imovel.juros_percentual ?? 1 },
+    ...(imovel.desconto_percentual > 0
+      ? { discount: { value: imovel.desconto_percentual, type: 'PERCENTAGE', dueDateLimitDays: 0 } }
       : {}),
   }
 
-  const asaasCharge = await createCharge(String(contract.landlordId), chargePayload)
+  const asaasCharge = await createCharge(imovel.user_id, chargePayload)
 
-  const rentalCharge = await RentalCharge.create({
-    contractId: contract._id,
-    landlordId: contract.landlordId,
-    tenantId: contract.tenantId,
-    asaasChargeId: asaasCharge.id,
-    asaasCustomerId,
-    amount: contract.rentAmount,
-    dueDate: new Date(`${dueDate}T12:00:00`),
-    referenceMonth,
-    invoiceUrl: asaasCharge.invoiceUrl ?? null,
-    status: 'PENDING',
-  })
+  const { data: aluguel, error } = await supabase
+    .from('alugueis')
+    .insert({
+      imovel_id:          imovel.id,
+      inquilino_id:       inquilino.id,
+      mes_referencia:     mesReferencia,
+      valor:              imovel.valor_aluguel,
+      data_vencimento:    dueDate,
+      status:             'pendente',
+      asaas_charge_id:    asaasCharge.id,
+      asaas_customer_id:  asaasCustomerId,
+      asaas_boleto_url:   asaasCharge.invoiceUrl ?? null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
 
   // E-mail de notificação — falha não bloqueia a resposta
   sendChargeCreatedEmail({
-    tenantName: tenant.name,
-    tenantEmail: tenant.email,
-    amount: contract.rentAmount,
-    dueDate: rentalCharge.dueDate,
-    invoiceUrl: asaasCharge.invoiceUrl ?? '',
+    tenantName:     inquilino.nome,
+    tenantEmail:    inquilino.email,
+    amount:         imovel.valor_aluguel,
+    dueDate:        new Date(`${dueDate}T12:00:00`),
+    invoiceUrl:     asaasCharge.invoiceUrl ?? '',
     referenceMonth,
   }).catch(err => console.error('[Email] Falha ao enviar cobrança:', err.message))
 
-  return rentalCharge
+  return aluguel
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// createRecurringCharge
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Cria uma assinatura recorrente no Asaas (billingMode=AUTOMATIC).
- * O Asaas passa a gerar e cobrar automaticamente todo mês na data de vencimento.
- * Se a assinatura já existir, retorna o ID existente sem criar duplicata.
+ * Cria uma assinatura recorrente no Asaas (billing_mode=AUTOMATIC).
+ * Se já existir, retorna o ID existente sem criar duplicata.
  *
- * @param {Object} contract  Documento Contract
- * @param {Object} tenant    Documento Tenant com asaasCustomerIds selecionado
- * @returns {Promise<string>}  asaasSubscriptionId
+ * @param {Object} imovel     Linha de imoveis
+ * @param {Object} inquilino  Linha de inquilinos
+ * @returns {Promise<string>} asaasSubscriptionId
  */
-async function createRecurringCharge(contract, tenant) {
-  if (contract.asaasSubscriptionId) return contract.asaasSubscriptionId
+async function createRecurringCharge(imovel, inquilino) {
+  if (imovel.asaas_subscription_id) return imovel.asaas_subscription_id
 
-  const asaasCustomerId = await createOrGetCustomer(contract, tenant)
+  const asaasCustomerId = await createOrGetCustomer(imovel, inquilino)
 
-  // Próxima data de vencimento: mês atual se dueDay ainda não passou, caso contrário próximo mês
   const now = new Date()
-  let nextYear = now.getFullYear()
-  let nextMonth = now.getMonth() + 1  // 1-based
-  if (now.getDate() > contract.dueDay) {
+  let nextYear  = now.getFullYear()
+  let nextMonth = now.getMonth() + 1
+  if (now.getDate() > imovel.dia_vencimento) {
     nextMonth++
     if (nextMonth > 12) { nextMonth = 1; nextYear++ }
   }
-  const nextDueDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-${String(contract.dueDay).padStart(2, '0')}`
+  const nextDueDate =
+    `${nextYear}-${String(nextMonth).padStart(2, '0')}-${String(imovel.dia_vencimento).padStart(2, '0')}`
 
-  const subscription = await createSubscription(String(contract.landlordId), {
-    customer: asaasCustomerId,
-    value: contract.rentAmount,
+  const subscription = await createSubscription(imovel.user_id, {
+    customer:          asaasCustomerId,
+    value:             imovel.valor_aluguel,
     nextDueDate,
-    description: `Aluguel mensal — ${contract.propertyAddress}`,
-    externalReference: String(contract._id),
-    fine: { value: contract.finePercent },
-    interest: { value: contract.interestPercent },
-    ...(contract.discountPercent > 0
-      ? { discount: { value: contract.discountPercent, type: 'PERCENTAGE', dueDateLimitDays: 0 } }
+    description:       `Aluguel mensal — ${imovel.endereco}`,
+    externalReference: imovel.id,
+    fine:              { value: imovel.multa_percentual ?? 2 },
+    interest:          { value: imovel.juros_percentual ?? 1 },
+    ...(imovel.desconto_percentual > 0
+      ? { discount: { value: imovel.desconto_percentual, type: 'PERCENTAGE', dueDateLimitDays: 0 } }
       : {}),
   })
 
-  await Contract.findByIdAndUpdate(contract._id, {
-    asaasSubscriptionId: subscription.id,
-  })
+  await supabase
+    .from('imoveis')
+    .update({ asaas_subscription_id: subscription.id })
+    .eq('id', imovel.id)
 
   return subscription.id
 }
 
-// Mapeamento de status Asaas → status interno
-const ASAAS_STATUS_MAP = {
-  PENDING: 'PENDING',
-  CONFIRMED: 'RECEIVED',
-  RECEIVED: 'RECEIVED',
-  OVERDUE: 'OVERDUE',
-  REFUNDED: 'REFUNDED',
-  REFUND_REQUESTED: 'REFUNDED',
-  CANCELLED: 'CANCELLED',
-  DELETED: 'CANCELLED',
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// getChargeStatus
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Sincroniza o status de uma cobrança com o Asaas e atualiza o banco se mudou.
  *
- * @param {string} landlordId
- * @param {string} rentalChargeId  _id do RentalCharge no MongoDB
- * @returns {Promise<Object>}      Documento RentalCharge atualizado
+ * @param {string} landlordId   user_id do proprietário
+ * @param {string} aluguelId    id da linha em alugueis
+ * @returns {Promise<Object>}   Linha de alugueis atualizada
  */
-async function getChargeStatus(landlordId, rentalChargeId) {
-  const rentalCharge = await RentalCharge.findOne({
-    _id: rentalChargeId,
-    landlordId,
-  })
-  if (!rentalCharge) {
-    const err = new Error('Cobrança não encontrada.')
-    err.statusCode = 404
-    throw err
-  }
+async function getChargeStatus(landlordId, aluguelId) {
+  // Busca e verifica propriedade via join
+  const { data: aluguel } = await supabase
+    .from('alugueis')
+    .select('*, imoveis!inner(user_id)')
+    .eq('id', aluguelId)
+    .eq('imoveis.user_id', landlordId)
+    .maybeSingle()
 
-  const asaasCharge = await getCharge(String(landlordId), rentalCharge.asaasChargeId)
-  const newStatus = ASAAS_STATUS_MAP[asaasCharge.status] ?? rentalCharge.status
+  if (!aluguel) throw notFound('Cobrança não encontrada.')
 
-  if (newStatus !== rentalCharge.status || asaasCharge.paymentDate) {
-    rentalCharge.status = newStatus
+  const asaasCharge = await getCharge(landlordId, aluguel.asaas_charge_id)
+  const newStatus   = ASAAS_STATUS_MAP[asaasCharge.status] ?? aluguel.status
+
+  if (newStatus !== aluguel.status || asaasCharge.paymentDate) {
+    const updates = { status: newStatus }
+
     if (asaasCharge.paymentDate) {
-      rentalCharge.paidAt = new Date(asaasCharge.paymentDate)
-      rentalCharge.paidAmount = asaasCharge.value
-      rentalCharge.paymentMethod = asaasCharge.billingType ?? null
+      updates.data_pagamento    = asaasCharge.paymentDate
+      updates.valor_pago        = asaasCharge.value
+      updates.metodo_pagamento  = asaasCharge.billingType ?? null
     }
-    await rentalCharge.save()
+
+    const { data: updated, error } = await supabase
+      .from('alugueis')
+      .update(updates)
+      .eq('id', aluguelId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return updated
   }
 
-  return rentalCharge
+  return aluguel
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cancelRentalCharge
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Cancela uma cobrança no Asaas e marca como CANCELLED no banco.
+ * Cancela uma cobrança no Asaas e marca como cancelado no banco.
  * Lança erro 409 se a cobrança já foi paga.
  *
- * @param {string} landlordId
- * @param {string} rentalChargeId  _id do RentalCharge no MongoDB
- * @returns {Promise<Object>}      Documento RentalCharge atualizado
+ * @param {string} landlordId   user_id do proprietário
+ * @param {string} aluguelId    id da linha em alugueis
+ * @returns {Promise<Object>}   Linha de alugueis atualizada
  */
-async function cancelRentalCharge(landlordId, rentalChargeId) {
-  const rentalCharge = await RentalCharge.findOne({
-    _id: rentalChargeId,
-    landlordId,
-  })
-  if (!rentalCharge) {
-    const err = new Error('Cobrança não encontrada.')
-    err.statusCode = 404
-    throw err
-  }
-  if (rentalCharge.status === 'RECEIVED') {
-    const err = new Error('Não é possível cancelar uma cobrança já paga.')
-    err.statusCode = 409
-    throw err
+async function cancelRentalCharge(landlordId, aluguelId) {
+  const { data: aluguel } = await supabase
+    .from('alugueis')
+    .select('*, imoveis!inner(user_id)')
+    .eq('id', aluguelId)
+    .eq('imoveis.user_id', landlordId)
+    .maybeSingle()
+
+  if (!aluguel) throw notFound('Cobrança não encontrada.')
+  if (aluguel.status === 'pago') throw conflict('Não é possível cancelar uma cobrança já paga.')
+
+  if (aluguel.status !== 'cancelado') {
+    await cancelCharge(landlordId, aluguel.asaas_charge_id)
+
+    const { data: updated, error } = await supabase
+      .from('alugueis')
+      .update({ status: 'cancelado' })
+      .eq('id', aluguelId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return updated
   }
 
-  if (rentalCharge.status !== 'CANCELLED') {
-    await cancelCharge(String(landlordId), rentalCharge.asaasChargeId)
-    rentalCharge.status = 'CANCELLED'
-    await rentalCharge.save()
-  }
-
-  return rentalCharge
+  return aluguel
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// generatePixQrCode
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Retorna o QR Code Pix de uma cobrança.
- * O código é cacheado no documento RentalCharge após a primeira consulta.
+ * O payload é cacheado em alugueis.asaas_pix_qrcode após a primeira consulta.
  *
- * @param {string} landlordId
- * @param {string} rentalChargeId  _id do RentalCharge no MongoDB
+ * @param {string} landlordId   user_id do proprietário
+ * @param {string} aluguelId    id da linha em alugueis
  * @returns {Promise<{ encodedImage: string|null, payload: string }>}
  */
-async function generatePixQrCode(landlordId, rentalChargeId) {
-  const rentalCharge = await RentalCharge.findOne({
-    _id: rentalChargeId,
-    landlordId,
-  })
-  if (!rentalCharge) {
-    const err = new Error('Cobrança não encontrada.')
-    err.statusCode = 404
-    throw err
+async function generatePixQrCode(landlordId, aluguelId) {
+  const { data: aluguel } = await supabase
+    .from('alugueis')
+    .select('*, imoveis!inner(user_id)')
+    .eq('id', aluguelId)
+    .eq('imoveis.user_id', landlordId)
+    .maybeSingle()
+
+  if (!aluguel) throw notFound('Cobrança não encontrada.')
+
+  if (aluguel.asaas_pix_qrcode) {
+    return { encodedImage: null, payload: aluguel.asaas_pix_qrcode }
   }
 
-  // Retorna do cache se já disponível
-  if (rentalCharge.pixQrCode) {
-    return { encodedImage: null, payload: rentalCharge.pixQrCode }
-  }
-
-  const qrData = await getPixQrCode(String(landlordId), rentalCharge.asaasChargeId)
+  const qrData = await getPixQrCode(landlordId, aluguel.asaas_charge_id)
 
   if (qrData.payload) {
-    rentalCharge.pixQrCode = qrData.payload
-    await rentalCharge.save()
+    await supabase
+      .from('alugueis')
+      .update({
+        asaas_pix_qrcode:     qrData.payload,
+        asaas_pix_copiaecola: qrData.payload,
+      })
+      .eq('id', aluguelId)
   }
 
   return qrData
