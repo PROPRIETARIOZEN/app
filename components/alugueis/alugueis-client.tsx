@@ -331,6 +331,17 @@ export function AlugueisClient({
   const qtdPago       = alugueis.filter(a => a.status === 'pago').length
   const qtdPendente   = alugueis.filter(a => a.status === 'pendente').length
   const qtdAtrasado   = alugueis.filter(a => a.status === 'atrasado').length
+  const qtdCancelado  = alugueis.filter(a => a.status === 'cancelado').length
+  const qtdEstornado  = alugueis.filter(a => a.status === 'estornado').length
+
+  const TABS = [
+    { id: 'todos'     as const, label: 'Todos',     count: alugueis.length, cls: '' },
+    { id: 'atrasado'  as const, label: 'Em atraso', count: qtdAtrasado,     cls: qtdAtrasado > 0 ? 'text-red-600' : '' },
+    { id: 'pendente'  as const, label: 'Pendente',  count: qtdPendente,     cls: '' },
+    { id: 'pago'      as const, label: 'Pago',      count: qtdPago,         cls: '' },
+    ...(qtdCancelado > 0 ? [{ id: 'cancelado' as const, label: 'Cancelado', count: qtdCancelado, cls: '' }] : []),
+    ...(qtdEstornado > 0 ? [{ id: 'estornado' as const, label: 'Estornado', count: qtdEstornado, cls: '' }] : []),
+  ]
 
   // Bulk selection helpers
   const allPageIds = paginados.map(a => a.id)
@@ -426,8 +437,6 @@ export function AlugueisClient({
     }
   }
 
-  const activeFilters = (filtroStatus !== 'todos' ? 1 : 0) + (filtroImovel !== 'todos' ? 1 : 0)
-
   return (
     <>
       {/* Header */}
@@ -474,98 +483,74 @@ export function AlugueisClient({
             </Button>
           </div>
 
-          {/* Filter button + dropdown panel */}
-          <div className="relative" ref={filterRef}>
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn('h-8 gap-1.5 text-sm', activeFilters > 0 && 'border-emerald-500 text-emerald-600')}
-              onClick={() => setFilterOpen(v => !v)}
-            >
-              <Filter className="h-3.5 w-3.5" />
-              Filtrar
-              {activeFilters > 0 && (
-                <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-emerald-500 text-white text-[10px] font-bold">
-                  {activeFilters}
-                </span>
-              )}
-            </Button>
+          {/* Imóvel filter — só aparece quando há mais de 1 imóvel */}
+          {imoveisUnicos.length > 1 && (
+            <div className="relative" ref={filterRef}>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn('h-8 gap-1.5 text-sm', filtroImovel !== 'todos' && 'border-emerald-500 text-emerald-600')}
+                onClick={() => setFilterOpen(v => !v)}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                {filtroImovel === 'todos' ? 'Todos' : filtroImovel}
+              </Button>
 
-            {filterOpen && (
-              <div className="absolute right-0 top-10 z-30 w-56 bg-white rounded-xl border border-slate-200 shadow-lg p-3 space-y-3">
-                {/* Status filter */}
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Status</p>
-                  <div className="flex flex-col gap-0.5">
-                    {(['todos', 'pago', 'pendente', 'atrasado', 'cancelado', 'estornado'] as const).map(s => (
+              {filterOpen && (
+                <div className="absolute right-0 top-10 z-30 w-52 bg-white rounded-xl border border-slate-200 shadow-lg p-2">
+                  <div className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
+                    {(['todos', ...imoveisUnicos] as const).map(nome => (
                       <button
-                        key={s}
-                        onClick={() => setFiltroStatus(s)}
+                        key={nome}
+                        onClick={() => { setFiltroImovel(nome); setFilterOpen(false) }}
                         className={cn(
                           'flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors',
-                          filtroStatus === s
+                          filtroImovel === nome
                             ? 'bg-emerald-50 text-emerald-700 font-medium'
                             : 'hover:bg-slate-50 text-slate-700',
                         )}
                       >
-                        {filtroStatus === s && <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />}
-                        {filtroStatus !== s && <span className="h-3 w-3 shrink-0" />}
-                        {s === 'todos' ? 'Todos' : s.charAt(0).toUpperCase() + s.slice(1)}
+                        {filtroImovel === nome
+                          ? <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                          : <span className="h-3 w-3 shrink-0" />
+                        }
+                        <span className="truncate">{nome === 'todos' ? 'Todos os imóveis' : nome}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-
-                {/* Imóvel filter */}
-                {imoveisUnicos.length > 1 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Imóvel</p>
-                    <div className="flex flex-col gap-0.5 max-h-36 overflow-y-auto">
-                      <button
-                        onClick={() => setFiltroImovel('todos')}
-                        className={cn(
-                          'flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors',
-                          filtroImovel === 'todos'
-                            ? 'bg-emerald-50 text-emerald-700 font-medium'
-                            : 'hover:bg-slate-50 text-slate-700',
-                        )}
-                      >
-                        {filtroImovel === 'todos' && <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />}
-                        {filtroImovel !== 'todos' && <span className="h-3 w-3 shrink-0" />}
-                        Todos os imóveis
-                      </button>
-                      {imoveisUnicos.map(nome => (
-                        <button
-                          key={nome}
-                          onClick={() => setFiltroImovel(nome)}
-                          className={cn(
-                            'flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors truncate',
-                            filtroImovel === nome
-                              ? 'bg-emerald-50 text-emerald-700 font-medium'
-                              : 'hover:bg-slate-50 text-slate-700',
-                          )}
-                        >
-                          {filtroImovel === nome && <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />}
-                          {filtroImovel !== nome && <span className="h-3 w-3 shrink-0" />}
-                          <span className="truncate">{nome}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeFilters > 0 && (
-                  <button
-                    onClick={() => { setFiltroStatus('todos'); setFiltroImovel('todos') }}
-                    className="w-full text-xs text-slate-400 hover:text-slate-600 py-1 transition-colors"
-                  >
-                    Limpar filtros
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Tabs de status */}
+      <div className="flex items-center gap-1 overflow-x-auto">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setFiltroStatus(tab.id)}
+            className={cn(
+              'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+              filtroStatus === tab.id
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent',
+            )}
+          >
+            <span className={filtroStatus !== tab.id ? tab.cls : ''}>{tab.label}</span>
+            <span className={cn(
+              'text-[11px] font-semibold px-1.5 py-0.5 rounded-full min-w-[20px] text-center',
+              filtroStatus === tab.id
+                ? 'bg-emerald-100 text-emerald-700'
+                : tab.id === 'atrasado' && tab.count > 0
+                  ? 'bg-red-100 text-red-600'
+                  : 'bg-slate-100 text-slate-500',
+            )}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Cards de resumo */}
