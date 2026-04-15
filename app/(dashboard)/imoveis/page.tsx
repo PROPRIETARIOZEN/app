@@ -7,7 +7,10 @@ export default async function ImoveisPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data }, { data: profile }] = await Promise.all([
+  const agora = new Date()
+  const mesAtual = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-01`
+
+  const [{ data }, { data: profile }, { data: alugueisMes }] = await Promise.all([
     supabase
       .from('imoveis')
       .select('*, inquilinos(id, nome, ativo)')
@@ -20,13 +23,23 @@ export default async function ImoveisPage() {
       .select('plano, role')
       .eq('id', user.id)
       .single(),
+
+    supabase
+      .from('alugueis')
+      .select('imovel_id, status, data_pagamento, data_vencimento')
+      .gte('mes_referencia', mesAtual)
+      .lte('mes_referencia', mesAtual.slice(0, 7) + '-31'),
   ])
 
   const plano = (profile?.role === 'admin' || profile?.plano === 'pago' ? 'pago' : 'gratis') as 'gratis' | 'pago'
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <ImoveisClient imoveis={(data ?? []) as Imovel[]} plano={plano} />
+      <ImoveisClient
+        imoveis={(data ?? []) as Imovel[]}
+        plano={plano}
+        alugueisMes={(alugueisMes ?? []) as { imovel_id: string; status: string; data_pagamento: string | null; data_vencimento: string }[]}
+      />
     </div>
   )
 }
