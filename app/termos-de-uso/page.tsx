@@ -123,7 +123,7 @@ export default function TermosDeUsoPage() {
 
         <Section title="7. Disponibilidade e Nível de Serviço">
           <p>
-            O ProprietárioZen envidarás melhores esforços para manter a plataforma disponível 24 horas por dia, 7 dias por semana. Contudo, o serviço é fornecido <strong>"no estado em que se encontra" (as-is)</strong>, sem garantia de disponibilidade ininterrupta. O ProprietárioZen não se responsabiliza por:
+            O ProprietárioZen envidarás melhores esforços para manter a plataforma disponível 24 horas por dia, 7 dias por semana. Contudo, o serviço é fornecido <strong>&ldquo;no estado em que se encontra&rdquo; (as-is)</strong>, sem garantia de disponibilidade ininterrupta. O ProprietárioZen não se responsabiliza por:
           </p>
           <ul className="mt-3 space-y-1.5 list-disc list-inside text-slate-600">
             <li>Interrupções causadas por manutenção programada (com aviso prévio quando possível);</li>
