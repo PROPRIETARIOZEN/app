@@ -154,9 +154,108 @@ function VencimentoCell({ aluguel }: { aluguel: AluguelItem }) {
 }
 
 // Cobrança column — shows Asaas state when available, else placeholder
-function CobrancaCell() {
-  // No Asaas fields yet — show dash
-  return <span className="text-slate-300 text-sm">—</span>
+function CobrancaCell({ aluguel }: { aluguel: AluguelItem }) {
+  const [pixOpen, setPixOpen] = useState(false)
+
+  // Sem cobrança Asaas
+  if (!aluguel.asaas_charge_id) {
+    return <span className="text-slate-300 text-sm">—</span>
+  }
+
+  // Pago via Asaas: exibe método
+  if (aluguel.status === 'pago' && aluguel.metodo_pagamento) {
+    const label = aluguel.metodo_pagamento === 'PIX' ? 'PIX'
+      : aluguel.metodo_pagamento === 'BOLETO' ? 'Boleto'
+      : aluguel.metodo_pagamento
+    return (
+      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[11px] font-semibold gap-1">
+        <CheckCircle2 className="h-2.5 w-2.5" />
+        {label}
+      </Badge>
+    )
+  }
+
+  // Cancelado ou estornado
+  if (aluguel.status === 'cancelado' || aluguel.status === 'estornado') {
+    return <span className="text-slate-400 text-xs">—</span>
+  }
+
+  // Pendente / atrasado com cobrança ativa: mostrar ações PIX / boleto
+  return (
+    <div className="flex items-center gap-1">
+      {/* PIX: botão que abre dialog com QR code */}
+      {aluguel.asaas_pix_copiaecola && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); setPixOpen(true) }}
+            className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+            title="Ver PIX copia e cola"
+          >
+            PIX
+          </button>
+
+          {pixOpen && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+              onClick={() => setPixOpen(false)}
+            >
+              <div
+                className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-800">PIX copia e cola</h3>
+                  <button onClick={() => setPixOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {aluguel.asaas_pix_qrcode && (
+                  <div className="flex justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`data:image/png;base64,${aluguel.asaas_pix_qrcode}`}
+                      alt="QR Code PIX"
+                      className="h-44 w-44 rounded-lg border"
+                    />
+                  </div>
+                )}
+
+                <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 break-all text-xs font-mono text-slate-600 select-all">
+                  {aluguel.asaas_pix_copiaecola}
+                </div>
+
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(aluguel.asaas_pix_copiaecola!)
+                      .then(() => toast.success('Código PIX copiado!'))
+                      .catch(() => toast.error('Não foi possível copiar.'))
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 transition-colors"
+                >
+                  Copiar código PIX
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Boleto */}
+      {aluguel.asaas_boleto_url && (
+        <a
+          href={aluguel.asaas_boleto_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+          title="Ver boleto"
+        >
+          Boleto
+        </a>
+      )}
+    </div>
+  )
 }
 
 export function AlugueisClient({
@@ -572,7 +671,7 @@ export function AlugueisClient({
 
                     {/* Cobrança */}
                     <div className="mb-2 md:mb-0">
-                      <CobrancaCell />
+                      <CobrancaCell aluguel={aluguel} />
                     </div>
 
                     {/* Valor */}
