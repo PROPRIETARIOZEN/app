@@ -16,12 +16,11 @@ export default async function AlugueisPage({
   const mesParam = searchParams.mes ?? mesAtual
   const mesReferencia = `${mesParam}-01`
 
-  // Não gera registros para meses futuros (evita poluir o banco e as métricas admin)
-  const isMesAtualOuPassado = mesParam <= mesAtual
-
   // Gera registros faltantes + atualiza atrasados em paralelo
+  // Meses futuros também são gerados quando o usuário navega até eles;
+  // gerarAlugueisMes já respeita data_inicio_contrato de cada imóvel.
   await Promise.all([
-    isMesAtualOuPassado ? gerarAlugueisMes(mesReferencia) : Promise.resolve({ criados: 0 }),
+    gerarAlugueisMes(mesReferencia),
     atualizarStatusAtrasados(),
   ])
 

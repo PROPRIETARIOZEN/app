@@ -115,6 +115,15 @@ type AluguelReceita = {
   imovel: { user_id: string } | null
 }
 
+type ImovelParaPreview = {
+  id: string
+  apelido: string
+  valor_aluguel: number
+  dia_vencimento: number
+  data_inicio_contrato: string | null
+  inquilinos: { nome: string; ativo: boolean }[]
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -161,6 +170,7 @@ export default async function DashboardPage({
     { data: proximosReajustes },
     { data: atividadeRecente },
     { data: receitaMeses },
+    { data: imoveisParaPreview },
   ] = await Promise.all([
     supabase.from('profiles').select('nome').eq('id', user.id).single(),
 
@@ -222,6 +232,12 @@ export default async function DashboardPage({
       .eq('imovel.user_id', user.id)
       .gte('mes_referencia', sixMonthsAgoStr)
       .lte('mes_referencia', mesAtual) as unknown as Promise<{ data: AluguelReceita[] | null; error: unknown }>,
+
+    // Imóveis para preview de cobranças futuras
+    supabase.from('imoveis')
+      .select('id, apelido, valor_aluguel, dia_vencimento, data_inicio_contrato, inquilinos(nome, ativo)')
+      .eq('user_id', user.id)
+      .eq('ativo', true) as unknown as Promise<{ data: ImovelParaPreview[] | null; error: unknown }>,
   ])
 
   // Totais do mês selecionado
@@ -240,6 +256,33 @@ export default async function DashboardPage({
   const trendReceber  = calcTrend(totalReceber, prevReceber)
   const trendRecebido = calcTrend(totalRecebido, prevRecebido)
   const trendAtrasado = calcTrend(totalAtrasado, prevAtrasado)
+
+  // Cobranças previstas para os próximos 2 meses
+  type ItemPreview = { apelido: string; inquilino: string; valor: number; dia: number }
+  type MesPreview  = { mes: string; mesLabel: string; total: number; items: ItemPreview[] }
+
+  const proximasCobrancas: MesPreview[] = [1, 2].map(delta => {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() + delta, 1)
+    const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(d)
+    const items: ItemPreview[] = (imoveisParaPreview ?? [])
+      .filter(imovel => {
+        if (!imovel.data_inicio_contrato) return true
+        return mes >= imovel.data_inicio_contrato.slice(0, 7)
+      })
+      .map(imovel => ({
+        apelido:    imovel.apelido,
+        inquilino:  imovel.inquilinos?.find(i => i.ativo)?.nome ?? 'Sem inquilino',
+        valor:      imovel.valor_aluguel,
+        dia:        imovel.dia_vencimento,
+      }))
+    return {
+      mes,
+      mesLabel: mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1),
+      total:    items.reduce((s, i) => s + i.valor, 0),
+      items,
+    }
+  }).filter(m => m.items.length > 0)
 
   // Saudação
   const horaLocal = (hoje.getUTCHours() - 3 + 24) % 24
@@ -511,6 +554,52 @@ export default async function DashboardPage({
           )}
         </div>
       </div>
+
+      {/* Cobranças previstas — próximos 2 meses */}
+      {proximasCobrancas.length > 0 && (
+        <Card>
+          <CardHeader className="pt-5 px-6 pb-2">
+            <div className="flex items-baseline justify-between gap-4">
+              <div>
+                <CardTitle className="text-base font-semibold text-[#0F172A]">Cobranças previstas</CardTitle>
+                <p className="text-xs text-slate-400 mt-0.5">Previsão calculada a partir dos imóveis ativos</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-6 pb-5 pt-2">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {proximasCobrancas.map(m => (
+                <Link
+                  key={m.mes}
+                  href={`/alugueis?mes=${m.mes}`}
+                  className="rounded-xl border border-slate-100 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-100 transition-colors p-4 block group"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-slate-700 group-hover:text-emerald-700">{m.mesLabel}</span>
+                    <span className="text-sm font-bold text-slate-800 group-hover:text-emerald-700">{formatarMoeda(m.total)}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {m.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs text-slate-500">
+                        <span className="truncate max-w-[60%]">
+                          {item.apelido}
+                          <span className="text-slate-400"> · {item.inquilino}</span>
+                        </span>
+                        <span className="font-medium text-slate-600 shrink-0 ml-2">
+                          dia {item.dia} · {formatarMoeda(item.valor)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-emerald-600 font-medium mt-3 group-hover:underline">
+                    Ver cobranças de {m.mesLabel.split(' ')[0].toLowerCase()} →
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Gráfico de receita — largura total */}
       <Card>
