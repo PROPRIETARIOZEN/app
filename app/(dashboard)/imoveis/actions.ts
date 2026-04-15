@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { registrarLog } from '@/lib/log'
 
 export type ImovelInput = {
   apelido: string
@@ -25,8 +26,13 @@ export async function criarImovel(input: ImovelInput): Promise<{ error?: string 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autorizado' }
 
-  const { error } = await supabase.from('imoveis').insert({ user_id: user.id, ...input })
+  const { data: inserted, error } = await supabase
+    .from('imoveis')
+    .insert({ user_id: user.id, ...input })
+    .select('id')
+    .single()
   if (error) return { error: error.message }
+  await registrarLog(user.id, 'IMOVEL_CRIADO', 'imovel', inserted?.id, { apelido: input.apelido })
   revalidatePath('/imoveis')
   return {}
 }

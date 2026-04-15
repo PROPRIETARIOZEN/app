@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { registrarLog } from '@/lib/log'
 
 function calcularVencimento(mesReferencia: string, diaVencimento: number): string {
   const [anoStr, mesStr] = mesReferencia.split('-')
@@ -107,6 +108,7 @@ export async function marcarComoPago(
     .eq('id', id)
 
   if (error) return { error: error.message }
+  await registrarLog(user.id, 'ALUGUEL_PAGO', 'aluguel', id, { data_pagamento: dataPagamento })
   revalidatePath('/alugueis')
   revalidatePath('/dashboard')
   return {}

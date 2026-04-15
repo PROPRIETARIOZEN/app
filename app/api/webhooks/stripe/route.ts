@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase-server'
+import { registrarLog } from '@/lib/log'
 import type Stripe from 'stripe'
 
 // Desabilita o body parsing automático do Next.js para verificar a assinatura do Stripe
@@ -8,12 +9,15 @@ export const dynamic = 'force-dynamic'
 
 async function atualizarPlanoUsuario(customerId: string, plano: 'gratis' | 'pago') {
   const admin = createAdminClient()
-  const { error } = await admin
+  const { data: profile, error } = await admin
     .from('profiles')
     .update({ plano })
     .eq('stripe_customer_id', customerId)
+    .select('id')
+    .single()
 
   if (error) console.error('[webhook] Erro ao atualizar plano:', error.message)
+  return profile?.id ?? null
 }
 
 export async function POST(req: NextRequest) {
@@ -51,16 +55,20 @@ export async function POST(req: NextRequest) {
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription
       if (sub.status === 'active' || sub.status === 'trialing') {
-        await atualizarPlanoUsuario(customerId, 'pago')
+        const uid = await atualizarPlanoUsuario(customerId, 'pago')
+        if (uid) await registrarLog(uid, 'UPGRADE_PRO', 'subscription', sub.id)
       } else if (sub.status === 'canceled' || sub.status === 'unpaid') {
-        await atualizarPlanoUsuario(customerId, 'gratis')
+        const uid = await atualizarPlanoUsuario(customerId, 'gratis')
+        if (uid) await registrarLog(uid, 'CANCELAMENTO', 'subscription', sub.id)
       }
       break
     }
 
     // Assinatura cancelada / expirada → plano Grátis
     case 'customer.subscription.deleted': {
-      await atualizarPlanoUsuario(customerId, 'gratis')
+      const sub = event.data.object as Stripe.Subscription
+      const uid = await atualizarPlanoUsuario(customerId, 'gratis')
+      if (uid) await registrarLog(uid, 'CANCELAMENTO', 'subscription', sub.id)
       break
     }
 
@@ -68,7 +76,8 @@ export async function POST(req: NextRequest) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
       if (session.mode === 'subscription' && session.payment_status === 'paid') {
-        await atualizarPlanoUsuario(customerId, 'pago')
+        const uid = await atualizarPlanoUsuario(customerId, 'pago')
+        if (uid) await registrarLog(uid, 'UPGRADE_PRO', 'checkout', session.id)
       }
       break
     }
