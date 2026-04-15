@@ -2,7 +2,8 @@ export type { Database } from './database'
 
 export type TipoImovel = 'apartamento' | 'casa' | 'kitnet' | 'comercial' | 'terreno' | 'outro'
 export type IndiceReajuste = 'igpm' | 'ipca' | 'fixo'
-export type StatusPagamento = 'pendente' | 'pago' | 'atrasado'
+export type StatusPagamento = 'pendente' | 'pago' | 'atrasado' | 'cancelado' | 'estornado'
+export type BillingMode = 'MANUAL' | 'AUTOMATIC'
 export type StatusImovel = 'disponivel' | 'alugado' | 'manutencao'
 
 export type Imovel = {
@@ -20,6 +21,11 @@ export type Imovel = {
   ativo: boolean
   observacoes: string | null
   criado_em: string
+  billing_mode: BillingMode
+  multa_percentual: number
+  juros_percentual: number
+  desconto_percentual: number
+  asaas_subscription_id: string | null
   inquilinos?: { id: string; nome: string; ativo: boolean }[]
 }
 

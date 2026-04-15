@@ -45,6 +45,11 @@ export type Database = {
           ativo: boolean
           observacoes: string | null
           criado_em: string
+          billing_mode: 'MANUAL' | 'AUTOMATIC'
+          multa_percentual: number
+          juros_percentual: number
+          desconto_percentual: number
+          asaas_subscription_id: string | null
         }
         Insert: {
           id?: string
@@ -60,6 +65,11 @@ export type Database = {
           percentual_fixo?: number | null
           ativo?: boolean
           observacoes?: string | null
+          billing_mode?: 'MANUAL' | 'AUTOMATIC'
+          multa_percentual?: number
+          juros_percentual?: number
+          desconto_percentual?: number
+          asaas_subscription_id?: string | null
         }
         Update: {
           apelido?: string
@@ -73,6 +83,11 @@ export type Database = {
           percentual_fixo?: number | null
           ativo?: boolean
           observacoes?: string | null
+          billing_mode?: 'MANUAL' | 'AUTOMATIC'
+          multa_percentual?: number
+          juros_percentual?: number
+          desconto_percentual?: number
+          asaas_subscription_id?: string | null
         }
         Relationships: [
           {
@@ -139,11 +154,18 @@ export type Database = {
           mes_referencia: string
           valor: number
           data_vencimento: string
-          status: 'pendente' | 'pago' | 'atrasado'
+          status: 'pendente' | 'pago' | 'atrasado' | 'cancelado' | 'estornado'
           data_pagamento: string | null
           observacao: string | null
           recibo_gerado: boolean
           criado_em: string
+          asaas_charge_id: string | null
+          asaas_pix_qrcode: string | null
+          asaas_pix_copiaecola: string | null
+          asaas_boleto_url: string | null
+          asaas_customer_id: string | null
+          valor_pago: number | null
+          metodo_pagamento: string | null
         }
         Insert: {
           id?: string
@@ -152,19 +174,33 @@ export type Database = {
           mes_referencia: string
           valor: number
           data_vencimento: string
-          status?: 'pendente' | 'pago' | 'atrasado'
+          status?: 'pendente' | 'pago' | 'atrasado' | 'cancelado' | 'estornado'
           data_pagamento?: string | null
           observacao?: string | null
           recibo_gerado?: boolean
+          asaas_charge_id?: string | null
+          asaas_pix_qrcode?: string | null
+          asaas_pix_copiaecola?: string | null
+          asaas_boleto_url?: string | null
+          asaas_customer_id?: string | null
+          valor_pago?: number | null
+          metodo_pagamento?: string | null
         }
         Update: {
           inquilino_id?: string | null
           valor?: number
           data_vencimento?: string
-          status?: 'pendente' | 'pago' | 'atrasado'
+          status?: 'pendente' | 'pago' | 'atrasado' | 'cancelado' | 'estornado'
           data_pagamento?: string | null
           observacao?: string | null
           recibo_gerado?: boolean
+          asaas_charge_id?: string | null
+          asaas_pix_qrcode?: string | null
+          asaas_pix_copiaecola?: string | null
+          asaas_boleto_url?: string | null
+          asaas_customer_id?: string | null
+          valor_pago?: number | null
+          metodo_pagamento?: string | null
         }
         Relationships: [
           {

@@ -14,6 +14,10 @@ export type ImovelInput = {
   indice_reajuste: 'igpm' | 'ipca' | 'fixo'
   percentual_fixo: number | null
   observacoes: string | null
+  billing_mode: 'MANUAL' | 'AUTOMATIC'
+  multa_percentual: number
+  juros_percentual: number
+  desconto_percentual: number
 }
 
 export async function criarImovel(input: ImovelInput): Promise<{ error?: string }> {

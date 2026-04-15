@@ -74,6 +74,8 @@ export const labelsStatusPagamento: Record<StatusPagamento, { label: string; var
   pago: { label: 'Pago', variant: 'default' },
   pendente: { label: 'Pendente', variant: 'outline' },
   atrasado: { label: 'Atrasado', variant: 'destructive' },
+  cancelado: { label: 'Cancelado', variant: 'secondary' },
+  estornado: { label: 'Estornado', variant: 'secondary' },
 }
 
 // Retorna o mês de referência formatado

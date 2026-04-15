@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Zap } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,10 @@ const schema = z.object({
   indice_reajuste: z.enum(['igpm', 'ipca', 'fixo']),
   percentual_fixo: z.string().optional(),
   observacoes: z.string().optional(),
+  billing_mode: z.enum(['MANUAL', 'AUTOMATIC']),
+  multa_percentual: z.string().refine(v => !isNaN(Number(v)) && Number(v) >= 0, 'Inválido'),
+  juros_percentual: z.string().refine(v => !isNaN(Number(v)) && Number(v) >= 0, 'Inválido'),
+  desconto_percentual: z.string().refine(v => !isNaN(Number(v)) && Number(v) >= 0, 'Inválido'),
 }).superRefine((d, ctx) => {
   if (d.indice_reajuste === 'fixo') {
     const v = Number(d.percentual_fixo)
@@ -64,6 +68,7 @@ export function ImovelModal({ open, onOpenChange, imovel }: ImovelModalProps) {
   })
 
   const indice = watch('indice_reajuste')
+  const billingMode = watch('billing_mode')
 
   useEffect(() => {
     if (!open) return
@@ -79,6 +84,10 @@ export function ImovelModal({ open, onOpenChange, imovel }: ImovelModalProps) {
         indice_reajuste: imovel.indice_reajuste,
         percentual_fixo: imovel.percentual_fixo != null ? String(imovel.percentual_fixo) : '',
         observacoes: imovel.observacoes ?? '',
+        billing_mode: imovel.billing_mode ?? 'MANUAL',
+        multa_percentual: String(imovel.multa_percentual ?? 2),
+        juros_percentual: String(imovel.juros_percentual ?? 1),
+        desconto_percentual: String(imovel.desconto_percentual ?? 0),
       })
     } else {
       reset({
@@ -86,6 +95,10 @@ export function ImovelModal({ open, onOpenChange, imovel }: ImovelModalProps) {
         valor_aluguel: '', dia_vencimento: '10',
         data_inicio_contrato: '', data_proximo_reajuste: '',
         indice_reajuste: 'fixo', percentual_fixo: '', observacoes: '',
+        billing_mode: 'MANUAL',
+        multa_percentual: '2',
+        juros_percentual: '1',
+        desconto_percentual: '0',
       })
     }
   }, [open, imovel, reset])
@@ -106,6 +119,10 @@ export function ImovelModal({ open, onOpenChange, imovel }: ImovelModalProps) {
           ? Number(data.percentual_fixo)
           : null,
         observacoes: data.observacoes || null,
+        billing_mode: data.billing_mode,
+        multa_percentual: Number(data.multa_percentual),
+        juros_percentual: Number(data.juros_percentual),
+        desconto_percentual: Number(data.desconto_percentual),
       }
       const result = editando
         ? await editarImovel(imovel!.id, input)
@@ -194,6 +211,49 @@ export function ImovelModal({ open, onOpenChange, imovel }: ImovelModalProps) {
               <Label htmlFor="data_proximo_reajuste">Próximo reajuste</Label>
               <Input id="data_proximo_reajuste" type="date" {...register('data_proximo_reajuste')} />
             </div>
+          </div>
+
+          {/* ── Cobrança automática ────────────────────────────────────────── */}
+          <div className="space-y-3 rounded-lg border border-dashed border-emerald-200 bg-emerald-50/40 p-3.5">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-medium text-emerald-800">Cobrança automática (Asaas)</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="billing_mode">Modo de cobrança</Label>
+              <select id="billing_mode" className={sel} {...register('billing_mode')}>
+                <option value="MANUAL">Manual — registrar pagamentos manualmente</option>
+                <option value="AUTOMATIC">Automático — gerar PIX/boleto via Asaas</option>
+              </select>
+            </div>
+
+            {billingMode === 'AUTOMATIC' && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="multa_percentual">Multa (%)</Label>
+                  <Input id="multa_percentual" type="number" step="0.01" min="0" placeholder="2.00" {...register('multa_percentual')} />
+                  {errors.multa_percentual && <p className="text-destructive text-xs">{errors.multa_percentual.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="juros_percentual">Juros a.m. (%)</Label>
+                  <Input id="juros_percentual" type="number" step="0.01" min="0" placeholder="1.00" {...register('juros_percentual')} />
+                  {errors.juros_percentual && <p className="text-destructive text-xs">{errors.juros_percentual.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="desconto_percentual">Desconto (%)</Label>
+                  <Input id="desconto_percentual" type="number" step="0.01" min="0" placeholder="0.00" {...register('desconto_percentual')} />
+                  {errors.desconto_percentual && <p className="text-destructive text-xs">{errors.desconto_percentual.message}</p>}
+                </div>
+              </div>
+            )}
+
+            {billingMode === 'MANUAL' && (
+              <p className="text-xs text-slate-500">
+                No modo manual, os pagamentos devem ser registrados manualmente no sistema.
+                Ative o modo automático para gerar cobranças via PIX e boleto com o Asaas.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
