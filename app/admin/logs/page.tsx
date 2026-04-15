@@ -138,7 +138,7 @@ export default function AdminLogsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center">

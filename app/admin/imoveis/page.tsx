@@ -570,7 +570,7 @@ function TabInadimplencia() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function AdminImoveisPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3">
         <div className="h-9 w-9 rounded-xl bg-blue-50 flex items-center justify-center">
           <Building2 className="h-5 w-5 text-blue-600" />
