@@ -96,27 +96,38 @@ export async function POST(req: NextRequest) {
     }
 
     // Search existing customer by CPF
-    const searchRes = await fetch(
-      `${baseUrl}/customers?cpfCnpj=${encodeURIComponent(inq.cpf)}`,
-      { headers, cache: 'no-store' }
-    )
-    if (searchRes.ok) {
-      const searchData = await searchRes.json() as { data?: { id: string }[] }
-      customerId = searchData.data?.[0]?.id ?? null
+    try {
+      const searchRes = await fetch(
+        `${baseUrl}/customers?cpfCnpj=${encodeURIComponent(inq.cpf)}`,
+        { headers, cache: 'no-store' }
+      )
+      if (searchRes.ok) {
+        const searchData = await searchRes.json() as { data?: { id: string }[] }
+        customerId = searchData.data?.[0]?.id ?? null
+      }
+    } catch (err) {
+      console.error('[Asaas] Falha ao buscar cliente:', err)
+      return NextResponse.json({ error: 'Falha de comunicação com o Asaas ao buscar cliente.' }, { status: 502 })
     }
 
     if (!customerId) {
       // Create new customer
-      const createRes = await fetch(`${baseUrl}/customers`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: inq.nome,
-          cpfCnpj: inq.cpf,
-          email: inq.email ?? undefined,
-          mobilePhone: inq.telefone ?? undefined,
-        }),
-      })
+      let createRes: Response
+      try {
+        createRes = await fetch(`${baseUrl}/customers`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            name: inq.nome,
+            cpfCnpj: inq.cpf,
+            email: inq.email ?? undefined,
+            mobilePhone: inq.telefone ?? undefined,
+          }),
+        })
+      } catch (err) {
+        console.error('[Asaas] Falha ao criar cliente:', err)
+        return NextResponse.json({ error: 'Falha de comunicação com o Asaas ao criar cliente.' }, { status: 502 })
+      }
       if (!createRes.ok) {
         const err = await createRes.json().catch(() => ({})) as { errors?: { description: string }[] }
         return NextResponse.json({
@@ -147,17 +158,23 @@ export async function POST(req: NextRequest) {
   const description = `Aluguel — ${(imovel as { apelido?: string } | null)?.apelido ?? 'Imóvel'} — ${mesLabel}/${anoRef}`
 
   // Create charge
-  const chargeRes = await fetch(`${baseUrl}/payments`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      customer: customerId,
-      billingType: 'UNDEFINED',
-      value: aluguel.valor,
-      dueDate,
-      description,
-    }),
-  })
+  let chargeRes: Response
+  try {
+    chargeRes = await fetch(`${baseUrl}/payments`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        customer: customerId,
+        billingType: 'UNDEFINED',
+        value: aluguel.valor,
+        dueDate,
+        description,
+      }),
+    })
+  } catch (err) {
+    console.error('[Asaas] Falha ao criar cobrança:', err)
+    return NextResponse.json({ error: 'Falha de comunicação com o Asaas. Verifique a URL da API.' }, { status: 502 })
+  }
 
   if (!chargeRes.ok) {
     const err = await chargeRes.json().catch(() => ({})) as { errors?: { description: string }[] }

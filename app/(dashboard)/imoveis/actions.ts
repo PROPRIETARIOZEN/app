@@ -42,13 +42,49 @@ export async function editarImovel(id: string, input: ImovelInput): Promise<{ er
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autorizado' }
 
+  // Ler dia_vencimento atual antes de atualizar
+  const { data: imovelAtual } = await supabase
+    .from('imoveis')
+    .select('dia_vencimento')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
   const { error } = await supabase
     .from('imoveis')
     .update(input)
     .eq('id', id)
     .eq('user_id', user.id)
   if (error) return { error: error.message }
+
+  // Se o dia de vencimento mudou, recalcular data_vencimento dos aluguéis
+  // pendentes/atrasados do mês atual em diante (não altera histórico pago)
+  if (imovelAtual && imovelAtual.dia_vencimento !== input.dia_vencimento) {
+    const hoje = new Date()
+    const mesAtualStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`
+
+    const { data: pendentes } = await supabase
+      .from('alugueis')
+      .select('id, mes_referencia')
+      .eq('imovel_id', id)
+      .gte('mes_referencia', mesAtualStr)
+      .in('status', ['pendente', 'atrasado'])
+
+    if (pendentes?.length) {
+      for (const aluguel of pendentes) {
+        const [anoStr, mesStr] = aluguel.mes_referencia.split('-')
+        const ano = parseInt(anoStr)
+        const mes = parseInt(mesStr)
+        const ultimoDia = new Date(ano, mes, 0).getDate()
+        const dia = Math.min(input.dia_vencimento, ultimoDia)
+        const novaData = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+        await supabase.from('alugueis').update({ data_vencimento: novaData }).eq('id', aluguel.id)
+      }
+    }
+  }
+
   revalidatePath('/imoveis')
+  revalidatePath('/alugueis')
   return {}
 }
 
