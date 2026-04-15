@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { LandingPage } from '@/components/landing/landing-page'
 
 // ── SEO Metadata ──────────────────────────────────────────────────────────────
@@ -141,7 +142,21 @@ const jsonLdOrg = {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function HomePage() {
+export default function HomePage({
+  searchParams,
+}: {
+  searchParams: { code?: string; error?: string; error_description?: string }
+}) {
+  // Supabase às vezes redireciona o código OAuth para a raiz (Site URL fallback)
+  // em vez de /api/auth/callback — reencaminhamos aqui
+  if (searchParams.code) {
+    redirect(`/api/auth/callback?code=${encodeURIComponent(searchParams.code)}`)
+  }
+
+  if (searchParams.error) {
+    redirect(`/login?error=${encodeURIComponent(searchParams.error_description ?? searchParams.error)}`)
+  }
+
   return (
     <>
       {/* JSON-LD Schema 1 — SoftwareApplication */}
