@@ -23,13 +23,14 @@ export async function gerarAlugueisMes(
 
   const { data: imoveis } = (await supabase
     .from('imoveis')
-    .select('id, valor_aluguel, dia_vencimento, inquilinos(id, ativo)')
+    .select('id, valor_aluguel, dia_vencimento, data_inicio_contrato, inquilinos(id, ativo)')
     .eq('user_id', user.id)
     .eq('ativo', true)) as unknown as {
     data: {
       id: string
       valor_aluguel: number
       dia_vencimento: number
+      data_inicio_contrato: string | null
       inquilinos: { id: string; ativo: boolean }[]
     }[] | null
   }
@@ -45,7 +46,16 @@ export async function gerarAlugueisMes(
   const existentesSet = new Set(existentes?.map(a => a.imovel_id) ?? [])
 
   const novos = imoveis
-    .filter(imovel => !existentesSet.has(imovel.id))
+    .filter(imovel => {
+      if (existentesSet.has(imovel.id)) return false
+      // Não gerar aluguel antes do início do contrato
+      if (imovel.data_inicio_contrato) {
+        const inicioMes = imovel.data_inicio_contrato.slice(0, 7) // YYYY-MM
+        const refMes = mesReferencia.slice(0, 7)                  // YYYY-MM
+        if (refMes < inicioMes) return false
+      }
+      return true
+    })
     .map(imovel => {
       const inquilinoAtivo = imovel.inquilinos?.find(i => i.ativo)
       return {

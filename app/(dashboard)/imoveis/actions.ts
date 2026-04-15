@@ -42,10 +42,10 @@ export async function editarImovel(id: string, input: ImovelInput): Promise<{ er
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autorizado' }
 
-  // Ler dia_vencimento atual antes de atualizar
+  // Ler estado atual antes de atualizar
   const { data: imovelAtual } = await supabase
     .from('imoveis')
-    .select('dia_vencimento')
+    .select('dia_vencimento, data_inicio_contrato')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -83,8 +83,21 @@ export async function editarImovel(id: string, input: ImovelInput): Promise<{ er
     }
   }
 
+  // Se data_inicio_contrato avançou, cancelar aluguéis pendentes/atrasados antes do novo início
+  if (imovelAtual && input.data_inicio_contrato &&
+      input.data_inicio_contrato !== imovelAtual.data_inicio_contrato) {
+    const inicioMesStr = `${input.data_inicio_contrato.slice(0, 7)}-01` // YYYY-MM-01
+    await supabase
+      .from('alugueis')
+      .update({ status: 'cancelado' })
+      .eq('imovel_id', id)
+      .lt('mes_referencia', inicioMesStr)
+      .in('status', ['pendente', 'atrasado'])
+  }
+
   revalidatePath('/imoveis')
   revalidatePath('/alugueis')
+  revalidatePath('/dashboard')
   return {}
 }
 
