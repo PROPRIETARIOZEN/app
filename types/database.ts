@@ -140,6 +140,7 @@ export type Database = {
           cpf: string | null
           ativo: boolean
           criado_em: string
+          asaas_customer_id: string | null
         }
         Insert: {
           id?: string
@@ -150,6 +151,7 @@ export type Database = {
           email?: string | null
           cpf?: string | null
           ativo?: boolean
+          asaas_customer_id?: string | null
         }
         Update: {
           imovel_id?: string
@@ -158,6 +160,7 @@ export type Database = {
           email?: string | null
           cpf?: string | null
           ativo?: boolean
+          asaas_customer_id?: string | null
         }
         Relationships: [
           {

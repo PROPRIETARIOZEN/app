@@ -31,7 +31,7 @@ export default async function AlugueisPage({
         mes_referencia, observacao, recibo_gerado,
         asaas_charge_id, asaas_pix_qrcode, asaas_pix_copiaecola,
         asaas_boleto_url, valor_pago, metodo_pagamento,
-        imovel:imoveis!inner(apelido, endereco, user_id),
+        imovel:imoveis!inner(apelido, endereco, user_id, billing_mode),
         inquilino:inquilinos(nome, cpf, email, telefone)
       `)
       .eq('mes_referencia', mesReferencia)

@@ -6,7 +6,7 @@ import {
   CheckCircle2, Clock, AlertTriangle, Receipt, FileText,
   Banknote, Building2, ChevronLeft, ChevronRight,
   Calendar, Filter, MoreHorizontal, X, CheckCheck,
-  AlertCircle, TrendingUp,
+  AlertCircle, TrendingUp, Zap, XCircle, Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -31,7 +31,7 @@ export type AluguelItem = {
   mes_referencia: string
   observacao: string | null
   recibo_gerado: boolean
-  imovel: { apelido: string; endereco: string } | null
+  imovel: { apelido: string; endereco: string; billing_mode?: string | null } | null
   inquilino: { nome: string; cpf: string | null; email: string | null; telefone: string | null } | null
   // Campos Asaas (preenchidos quando billing_mode = AUTOMATIC)
   asaas_charge_id: string | null
@@ -273,6 +273,7 @@ export function AlugueisClient({
   const [modalOpen, setModalOpen] = useState(false)
   const [pagando, setPagando] = useState<AluguelItem | null>(null)
   const [loadingRecibo, setLoadingRecibo] = useState<string | null>(null)
+  const [loadingCobranca, setLoadingCobranca] = useState<string | null>(null)
 
   // Filter state
   const [filterOpen, setFilterOpen] = useState(false)
@@ -379,6 +380,50 @@ export function AlugueisClient({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo PDF')
     } finally { setLoadingRecibo(null) }
+  }
+
+  async function handleGerarCobranca(aluguel: AluguelItem) {
+    setLoadingCobranca(aluguel.id)
+    try {
+      const res = await fetch('/api/asaas/cobranca/criar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aluguelId: aluguel.id }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) {
+        toast.error(data.error ?? 'Erro ao gerar cobrança')
+        return
+      }
+      toast.success('Cobrança gerada com sucesso!')
+      router.refresh()
+    } catch {
+      toast.error('Erro ao gerar cobrança')
+    } finally {
+      setLoadingCobranca(null)
+    }
+  }
+
+  async function handleCancelarCobranca(aluguel: AluguelItem) {
+    setLoadingCobranca(aluguel.id)
+    try {
+      const res = await fetch('/api/asaas/cobranca/cancelar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aluguelId: aluguel.id }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) {
+        toast.error(data.error ?? 'Erro ao cancelar cobrança')
+        return
+      }
+      toast.success('Cobrança cancelada')
+      router.refresh()
+    } catch {
+      toast.error('Erro ao cancelar cobrança')
+    } finally {
+      setLoadingCobranca(null)
+    }
   }
 
   const activeFilters = (filtroStatus !== 'todos' ? 1 : 0) + (filtroImovel !== 'todos' ? 1 : 0)
@@ -715,11 +760,44 @@ export function AlugueisClient({
                             </DropdownMenuItem>
                           ) : (
                             <>
-                              <DropdownMenuItem onSelect={() => handlePagar(aluguel)}>
-                                <Banknote className="h-3.5 w-3.5 mr-2" />
-                                Gerar cobrança
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
+                              {aluguel.imovel?.billing_mode === 'AUTOMATIC' && (
+                                <>
+                                  {!aluguel.asaas_charge_id ? (
+                                    <DropdownMenuItem
+                                      disabled={loadingCobranca === aluguel.id}
+                                      onSelect={() => handleGerarCobranca(aluguel)}
+                                    >
+                                      {loadingCobranca === aluguel.id
+                                        ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                                        : <Zap className="h-3.5 w-3.5 mr-2 text-amber-500" />
+                                      }
+                                      Gerar cobrança Asaas
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem
+                                      disabled={loadingCobranca === aluguel.id}
+                                      onSelect={() => handleCancelarCobranca(aluguel)}
+                                      className="text-red-600 focus:text-red-600"
+                                    >
+                                      {loadingCobranca === aluguel.id
+                                        ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                                        : <XCircle className="h-3.5 w-3.5 mr-2" />
+                                      }
+                                      Cancelar cobrança
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                </>
+                              )}
+                              {aluguel.imovel?.billing_mode !== 'AUTOMATIC' && (
+                                <>
+                                  <DropdownMenuItem onSelect={() => handlePagar(aluguel)}>
+                                    <Banknote className="h-3.5 w-3.5 mr-2" />
+                                    Registrar pagamento
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                </>
+                              )}
                               <DropdownMenuItem onSelect={() => handlePagar(aluguel)}>
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-2" />
                                 Marcar como pago
