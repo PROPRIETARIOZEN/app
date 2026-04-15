@@ -1,17 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { User, CreditCard, Bell, ShieldCheck } from 'lucide-react'
+import { User, CreditCard, Bell, ShieldCheck, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AbaPerfil } from './aba-perfil'
 import { AbaAssinatura } from './aba-assinatura'
 import { AbaNotificacoes } from './aba-notificacoes'
 import { AbaSeguranca } from './aba-seguranca'
+import { AbaAsaas } from './aba-asaas'
 import type { NotificacoesConfig } from '@/app/(dashboard)/configuracoes/types'
 
 const ABAS = [
   { id: 'perfil',       label: 'Perfil',        icon: User },
   { id: 'assinatura',   label: 'Assinatura',    icon: CreditCard },
+  { id: 'cobrancas',    label: 'Cobranças',     icon: Zap },
   { id: 'notificacoes', label: 'Notificações',  icon: Bell },
   { id: 'seguranca',    label: 'Segurança',     icon: ShieldCheck },
 ] as const
@@ -25,6 +27,8 @@ interface Props {
     telefone: string | null
     plano: 'gratis' | 'pago'
     criado_em: string
+    asaas_account_id: string | null
+    asaas_account_status: string | null
   }
   avatarUrl: string | null
   qtdImoveis: number
@@ -83,6 +87,15 @@ export function ConfiguracoesClient({ profile, avatarUrl, qtdImoveis, notificaco
         <div className="flex-1 min-w-0">
           {abaAtiva === 'perfil' && <AbaPerfil profile={profile} avatarUrl={avatarUrl} qtdImoveis={qtdImoveis} />}
           {abaAtiva === 'assinatura' && <AbaAssinatura plano={profile.plano} />}
+          {abaAtiva === 'cobrancas' && (
+            <AbaAsaas
+              asaasAccountId={profile.asaas_account_id}
+              asaasAccountStatus={profile.asaas_account_status}
+              profileNome={profile.nome}
+              profileEmail={profile.email}
+              profileTelefone={profile.telefone}
+            />
+          )}
           {abaAtiva === 'notificacoes' && <AbaNotificacoes config={notificacoesConfig} />}
           {abaAtiva === 'seguranca' && <AbaSeguranca email={profile.email} />}
         </div>

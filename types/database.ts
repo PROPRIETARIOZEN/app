@@ -11,6 +11,11 @@ export type Database = {
           stripe_customer_id: string | null
           criado_em: string
           atualizado_em: string
+          asaas_account_id: string | null
+          asaas_account_status: string | null
+          asaas_api_key_enc: string | null
+          asaas_wallet_id: string | null
+          asaas_customer_id: string | null
         }
         Insert: {
           id: string
@@ -19,6 +24,11 @@ export type Database = {
           telefone?: string | null
           plano?: 'gratis' | 'pago'
           stripe_customer_id?: string | null
+          asaas_account_id?: string | null
+          asaas_account_status?: string | null
+          asaas_api_key_enc?: string | null
+          asaas_wallet_id?: string | null
+          asaas_customer_id?: string | null
         }
         Update: {
           nome?: string
@@ -26,6 +36,11 @@ export type Database = {
           telefone?: string | null
           plano?: 'gratis' | 'pago'
           stripe_customer_id?: string | null
+          asaas_account_id?: string | null
+          asaas_account_status?: string | null
+          asaas_api_key_enc?: string | null
+          asaas_wallet_id?: string | null
+          asaas_customer_id?: string | null
         }
         Relationships: []
       }

@@ -10,7 +10,7 @@ export default async function ConfiguracoesPage() {
   const [{ data: profile }, { count: qtdImoveis }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('nome, email, telefone, plano, criado_em')
+      .select('nome, email, telefone, plano, criado_em, asaas_account_id, asaas_account_status')
       .eq('id', user.id)
       .single(),
 
@@ -36,6 +36,8 @@ export default async function ConfiguracoesPage() {
     telefone: null,
     plano: 'gratis' as const,
     criado_em: user.created_at,
+    asaas_account_id: null,
+    asaas_account_status: null,
   }
 
   return (
