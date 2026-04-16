@@ -52,6 +52,95 @@ function IconeArquivo({ mimeType, className }: { mimeType: string; className?: s
   return <File className={cn('text-slate-400', className)} />
 }
 
+// ─── DocList ──────────────────────────────────────────────────────────────────
+
+function DocRow({
+  doc, deletando, onDeletar,
+}: { doc: Documento; deletando: string | null; onDeletar: (d: Documento) => void }) {
+  return (
+    <li className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+      <IconeArquivo mimeType={doc.mime_type} className="h-5 w-5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p
+          className="text-sm font-medium text-[#0F172A] truncate leading-snug"
+          title={doc.nome_arquivo}
+        >
+          {doc.nome_arquivo}
+        </p>
+        <p className="text-xs text-[#94A3B8]">{doc.tamanho}</p>
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button
+          onClick={() => window.open(doc.url, '_blank')}
+          className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 text-[#64748B] hover:text-[#0F172A] transition-colors"
+          title="Visualizar"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+        <a
+          href={doc.url}
+          download={doc.nome_arquivo}
+          className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 text-[#64748B] hover:text-[#0F172A] transition-colors"
+          title="Baixar"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </a>
+        <button
+          onClick={() => onDeletar(doc)}
+          disabled={deletando === doc.id}
+          className="h-7 w-7 flex items-center justify-center rounded hover:bg-red-50 text-[#94A3B8] hover:text-red-600 transition-colors disabled:opacity-40"
+          title="Remover"
+        >
+          {deletando === doc.id
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <Trash2 className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+    </li>
+  )
+}
+
+function DocList({
+  docs, mostrarCategoria, deletando, onDeletar,
+}: {
+  docs: Documento[]
+  mostrarCategoria: boolean
+  deletando: string | null
+  onDeletar: (d: Documento) => void
+}) {
+  if (!mostrarCategoria) {
+    return (
+      <ul className="divide-y divide-[#F1F5F9]">
+        {docs.map(doc => (
+          <DocRow key={doc.id} doc={doc} deletando={deletando} onDeletar={onDeletar} />
+        ))}
+      </ul>
+    )
+  }
+
+  // Agrupar por tipo na ordem definida em TIPO_LABELS
+  const grupos = (Object.keys(TIPO_LABELS) as TipoDoc[])
+    .map(tipo => ({ tipo, lista: docs.filter(d => d.tipo === tipo) }))
+    .filter(g => g.lista.length > 0)
+
+  return (
+    <div className="space-y-4">
+      {grupos.map(({ tipo, lista }) => (
+        <div key={tipo}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#94A3B8] mb-1.5 px-0.5">
+            {TIPO_LABELS[tipo]}
+          </p>
+          <ul className="divide-y divide-[#F1F5F9]">
+            {lista.map(doc => (
+              <DocRow key={doc.id} doc={doc} deletando={deletando} onDeletar={onDeletar} />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function DocumentosAluguel({ aluguelId }: Props) {
@@ -64,6 +153,7 @@ export function DocumentosAluguel({ aluguelId }: Props) {
   const [uploading, setUploading]           = useState(false)
   const [progresso, setProgresso]           = useState(0)
   const [deletando, setDeletando]           = useState<string | null>(null)
+  const [tabAtiva, setTabAtiva]             = useState<TipoDoc | 'todos'>('todos')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const buscarDocs = useCallback(async () => {
@@ -184,6 +274,7 @@ export function DocumentosAluguel({ aluguelId }: Props) {
 
       setProgresso(100)
       setDocs(prev => [novoDoc, ...prev])
+      setTabAtiva(novoDoc.tipo)
       toast.success('Documento enviado com sucesso!')
       setFileParaConfirmar(null)
     } catch (err) {
@@ -206,7 +297,11 @@ export function DocumentosAluguel({ aluguelId }: Props) {
         toast.error(json.error ?? 'Erro ao remover')
         return
       }
-      setDocs(prev => prev.filter(d => d.id !== doc.id))
+      setDocs(prev => {
+        const nova = prev.filter(d => d.id !== doc.id)
+        if (tabAtiva !== 'todos' && !nova.some(d => d.tipo === tabAtiva)) setTabAtiva('todos')
+        return nova
+      })
       toast.success('Documento removido')
     } catch {
       toast.error('Erro ao remover documento')
@@ -276,52 +371,65 @@ export function DocumentosAluguel({ aluguelId }: Props) {
               <p className="text-sm text-[#94A3B8]">Nenhum documento anexado ainda</p>
             </div>
           ) : (
-            <ul className="divide-y divide-[#F1F5F9]">
-              {docs.map((doc) => (
-                <li key={doc.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <IconeArquivo mimeType={doc.mime_type} className="h-5 w-5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-sm font-medium text-[#0F172A] truncate leading-snug"
-                      title={doc.nome_arquivo}
-                    >
-                      {doc.nome_arquivo}
-                    </p>
-                    <p className="text-xs text-[#94A3B8]">
-                      {TIPO_LABELS[doc.tipo]} · {doc.tamanho}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      onClick={() => window.open(doc.url, '_blank')}
-                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 text-[#64748B] hover:text-[#0F172A] transition-colors"
-                      title="Visualizar"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
-                    <a
-                      href={doc.url}
-                      download={doc.nome_arquivo}
-                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 text-[#64748B] hover:text-[#0F172A] transition-colors"
-                      title="Baixar"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </a>
-                    <button
-                      onClick={() => handleDeletar(doc)}
-                      disabled={deletando === doc.id}
-                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-red-50 text-[#94A3B8] hover:text-red-600 transition-colors disabled:opacity-40"
-                      title="Remover"
-                    >
-                      {deletando === doc.id
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Trash2 className="h-3.5 w-3.5" />
-                      }
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              {/* ── Tabs de categoria ─────────────────────────────────────── */}
+              <div className="flex gap-1.5 flex-wrap">
+                {/* Todos */}
+                <button
+                  onClick={() => setTabAtiva('todos')}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors',
+                    tabAtiva === 'todos'
+                      ? 'bg-[#0F172A] text-white border-[#0F172A]'
+                      : 'border-[#E2E8F0] text-[#64748B] hover:border-[#CBD5E1] hover:text-[#475569]',
+                  )}
+                >
+                  Todos
+                  <span className={cn(
+                    'rounded-full px-1 text-[10px] font-semibold',
+                    tabAtiva === 'todos' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
+                  )}>
+                    {docs.length}
+                  </span>
+                </button>
+
+                {/* Uma tab por categoria que tenha docs, na ordem do enum */}
+                {(Object.keys(TIPO_LABELS) as TipoDoc[])
+                  .filter(t => docs.some(d => d.tipo === t))
+                  .map(t => {
+                    const count = docs.filter(d => d.tipo === t).length
+                    const ativa = tabAtiva === t
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setTabAtiva(t)}
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors',
+                          ativa
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'border-[#E2E8F0] text-[#64748B] hover:border-[#CBD5E1] hover:text-[#475569]',
+                        )}
+                      >
+                        {TIPO_LABELS[t]}
+                        <span className={cn(
+                          'rounded-full px-1 text-[10px] font-semibold',
+                          ativa ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
+                        )}>
+                          {count}
+                        </span>
+                      </button>
+                    )
+                  })}
+              </div>
+
+              {/* ── Lista filtrada ─────────────────────────────────────────── */}
+              <DocList
+                docs={tabAtiva === 'todos' ? docs : docs.filter(d => d.tipo === tabAtiva)}
+                mostrarCategoria={tabAtiva === 'todos'}
+                deletando={deletando}
+                onDeletar={handleDeletar}
+              />
+            </>
           )}
         </div>
       </div>
