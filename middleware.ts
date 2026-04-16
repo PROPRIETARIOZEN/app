@@ -1,7 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const rotasPublicas = ['/', '/login', '/cadastro', '/recuperar-senha', '/sucesso', '/cancelado', '/planos', '/bloqueado', '/api/auth']
+const rotasPublicas = [
+  '/',
+  '/login',
+  '/cadastro',
+  '/recuperar-senha',
+  '/sucesso',
+  '/cancelado',
+  '/planos',
+  '/bloqueado',
+  '/api/auth',
+  '/inquilino',
+  '/api/inquilino/pagina',
+  '/api/inquilino/documento',
+]
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })

@@ -141,6 +141,7 @@ export type Database = {
           ativo: boolean
           criado_em: string
           asaas_customer_id: string | null
+          convite_enviado_em: string | null
         }
         Insert: {
           id?: string
@@ -152,6 +153,7 @@ export type Database = {
           cpf?: string | null
           ativo?: boolean
           asaas_customer_id?: string | null
+          convite_enviado_em?: string | null
         }
         Update: {
           imovel_id?: string
@@ -161,6 +163,7 @@ export type Database = {
           cpf?: string | null
           ativo?: boolean
           asaas_customer_id?: string | null
+          convite_enviado_em?: string | null
         }
         Relationships: [
           {
@@ -346,6 +349,45 @@ export type Database = {
             columns: ["inquilino_id"]
             isOneToOne: false
             referencedRelation: "inquilinos"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      inquilino_tokens: {
+        Row: {
+          id: string
+          inquilino_id: string
+          user_id: string
+          token: string
+          ativo: boolean
+          criado_em: string
+          ultimo_acesso: string | null
+        }
+        Insert: {
+          id?: string
+          inquilino_id: string
+          user_id: string
+          token: string
+          ativo?: boolean
+          ultimo_acesso?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          ultimo_acesso?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inquilino_tokens_inquilino_id_fkey"
+            columns: ["inquilino_id"]
+            isOneToOne: false
+            referencedRelation: "inquilinos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquilino_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]

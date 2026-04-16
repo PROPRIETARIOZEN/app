@@ -39,6 +39,7 @@ export type Inquilino = {
   cpf: string | null
   ativo: boolean
   criado_em: string
+  convite_enviado_em: string | null
   imovel?: { id: string; apelido: string } | null
 }
 

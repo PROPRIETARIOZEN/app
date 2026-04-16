@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Plus, Users, Pencil, UserX, Phone, Building2,
   Search, MoreHorizontal, CheckCircle2, Clock, AlertTriangle, Paperclip,
+  Mail, ShieldOff,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -112,6 +113,8 @@ export function InquilinosClient({ inquilinos, imoveis, alugueisMes }: Props) {
   const [editando, setEditando] = useState<Inquilino | null>(null)
   const [busca, setBusca]       = useState('')
   const [docInquilino, setDocInquilino] = useState<{ id: string; nome: string } | null>(null)
+  const [convidando, setConvidando] = useState<string | null>(null)
+  const [revogando, setRevogando]   = useState<string | null>(null)
 
   const aluguelMap = Object.fromEntries(
     alugueisMes.map(a => [a.inquilino_id, a])
@@ -137,6 +140,50 @@ export function InquilinosClient({ inquilinos, imoveis, alugueisMes }: Props) {
     const result = await desativarInquilino(inquilino.id)
     if (result.error) toast.error(result.error)
     else toast.success('Inquilino desativado')
+  }
+
+  async function handleEnviarConvite(inquilino: InquilinoRich) {
+    if (!inquilino.email) {
+      toast.error('Inquilino não possui e-mail cadastrado.')
+      return
+    }
+    setConvidando(inquilino.id)
+    try {
+      const res = await fetch('/api/inquilino/enviar-convite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquilinoId: inquilino.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error ?? 'Erro ao enviar convite.'); return }
+      toast.success('Convite enviado!', {
+        description: data.link,
+        action: {
+          label: 'Copiar link',
+          onClick: () => navigator.clipboard.writeText(data.link),
+        },
+      })
+      router.refresh()
+    } finally {
+      setConvidando(null)
+    }
+  }
+
+  async function handleRevogar(inquilino: InquilinoRich) {
+    if (!confirm(`Revogar acesso de "${inquilino.nome}"? O link atual deixará de funcionar.`)) return
+    setRevogando(inquilino.id)
+    try {
+      const res = await fetch('/api/inquilino/revogar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquilinoId: inquilino.id }),
+      })
+      if (!res.ok) { toast.error('Erro ao revogar acesso.'); return }
+      toast.success('Acesso revogado com sucesso.')
+      router.refresh()
+    } finally {
+      setRevogando(null)
+    }
   }
 
   return (
@@ -234,6 +281,12 @@ export function InquilinosClient({ inquilinos, imoveis, alugueisMes }: Props) {
                       )}>
                         {inquilino.ativo ? 'Ativo' : 'Inativo'}
                       </Badge>
+                      {inquilino.convite_enviado_em && (
+                        <Badge className="text-[10px] h-4 px-1.5 font-semibold shrink-0 bg-teal-50 text-teal-700 hover:bg-teal-50 gap-0.5">
+                          <Mail className="h-2.5 w-2.5" />
+                          Convite
+                        </Badge>
+                      )}
                     </div>
                     {inquilino.email && (
                       <p className="text-xs text-[#94A3B8] truncate mt-0.5">{inquilino.email}</p>
@@ -302,6 +355,32 @@ export function InquilinosClient({ inquilinos, imoveis, alugueisMes }: Props) {
                         <DropdownMenuItem onClick={() => setDocInquilino({ id: inquilino.id, nome: inquilino.nome })}>
                           <Paperclip className="h-3.5 w-3.5 mr-2" />Documentos
                         </DropdownMenuItem>
+                        {inquilino.ativo && inquilino.email && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleEnviarConvite(inquilino)}
+                              disabled={convidando === inquilino.id}
+                            >
+                              <Mail className="h-3.5 w-3.5 mr-2" />
+                              {convidando === inquilino.id
+                                ? 'Enviando...'
+                                : inquilino.convite_enviado_em
+                                  ? 'Reenviar convite'
+                                  : 'Enviar convite'}
+                            </DropdownMenuItem>
+                            {inquilino.convite_enviado_em && (
+                              <DropdownMenuItem
+                                onClick={() => handleRevogar(inquilino)}
+                                disabled={revogando === inquilino.id}
+                                className="text-red-600 focus:text-red-600"
+                              >
+                                <ShieldOff className="h-3.5 w-3.5 mr-2" />
+                                {revogando === inquilino.id ? 'Revogando...' : 'Revogar acesso'}
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
                         {inquilino.ativo && (
                           <>
                             <DropdownMenuSeparator />

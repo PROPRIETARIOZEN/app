@@ -218,6 +218,54 @@ export async function enviarAlertaReajuste(p: ReajusteParams) {
   return data
 }
 
+// ─── Template 4: Convite ao inquilino ────────────────────────────────────────
+
+interface ConviteInquilinoParams {
+  para: string
+  nomeInquilino: string
+  nomeProprietario: string
+  nomeImovel: string
+  enderecoImovel: string
+  token: string
+}
+
+export async function enviarConviteInquilino(p: ConviteInquilinoParams) {
+  const link = `${APP_URL}/inquilino/${p.token}`
+
+  const body = `
+    <p style="margin:0 0 8px;font-size:15px;color:#374151;">Olá, <strong>${p.nomeInquilino}</strong>!</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#374151;">
+      <strong>${p.nomeProprietario}</strong> te convidou para acessar sua área exclusiva de inquilino
+      no <strong>ProprietárioZen</strong>. Por lá você pode acompanhar tudo sobre o seu aluguel
+      sem precisar criar uma conta.
+    </p>
+    ${infoTable([
+      ['Imóvel', p.nomeImovel],
+      ['Endereço', p.enderecoImovel],
+    ])}
+    <p style="margin:0 0 4px;font-size:14px;color:#374151;font-weight:600;">O que você encontra na sua área:</p>
+    <ul style="color:#374151;font-size:14px;line-height:2;margin:8px 0 20px;padding-left:20px;">
+      <li>Próximo vencimento e valor do aluguel</li>
+      <li>Histórico completo de pagamentos</li>
+      <li>Documentos do seu contrato</li>
+      <li>Dados do imóvel e contato do proprietário</li>
+    </ul>
+    ${ctaButton('Acessar minha área', link, '#059669')}
+    <p style="margin:20px 0 0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
+      Este link é pessoal e permanente. Não compartilhe com outras pessoas.<br />
+      Caso precise de ajuda, entre em contato com ${p.nomeProprietario}.
+    </p>`
+
+  const { data, error } = await resend.emails.send({
+    from: FROM,
+    to: [p.para],
+    subject: `Seu acesso ao ProprietárioZen — ${p.nomeImovel}`,
+    html: wrapEmail('#059669', 'Área do Inquilino', body),
+  })
+  if (error) throw error
+  return data
+}
+
 // ─── Funções legadas (mantidas para compatibilidade) ─────────────────────────
 
 interface EmailCobrancaParams {
