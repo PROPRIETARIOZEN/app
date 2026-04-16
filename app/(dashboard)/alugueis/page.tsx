@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { AlugueisClient, type AluguelItem } from '@/components/alugueis/alugueis-client'
-import type { AnoResumoItem } from '@/components/alugueis/calendario-anual'
+import type { AnoResumoItem, ImovelVigencia } from '@/components/alugueis/calendario-anual'
 import { gerarAlugueisMes, gerarAlugueisMesesAno, atualizarStatusAtrasados } from './actions'
 
 export default async function AlugueisPage({
@@ -29,7 +29,7 @@ export default async function AlugueisPage({
     atualizarStatusAtrasados(),
   ])
 
-  const [{ data: alugueis }, { data: profile }, { data: alugueiAno }] = await Promise.all([
+  const [{ data: alugueis }, { data: profile }, { data: alugueiAno }, { data: imoveisVigencia }] = await Promise.all([
     supabase
       .from('alugueis')
       .select(`
@@ -52,7 +52,7 @@ export default async function AlugueisPage({
       .eq('id', user.id)
       .single(),
 
-    // Dados anuais para o calendário (todos os meses do ano selecionado)
+    // Dados anuais para o calendário (registros reais do banco)
     supabase
       .from('alugueis')
       .select('valor, status, mes_referencia, imovel:imoveis!inner(user_id)')
@@ -61,6 +61,14 @@ export default async function AlugueisPage({
       .lte('mes_referencia', `${anoNum}-12-31`)
       .neq('status', 'cancelado')
       .neq('status', 'estornado'),
+
+    // Vigência dos imóveis ativos — usada apenas para projeção visual no calendário.
+    // Não cria nenhum registro. Não filtrado por ano para funcionar ao navegar entre anos.
+    supabase
+      .from('imoveis')
+      .select('id, valor_aluguel, data_inicio_contrato, data_fim_contrato, contrato_indeterminado')
+      .eq('user_id', user.id)
+      .eq('ativo', true),
   ])
 
   const pix_key = (user.user_metadata?.pix_key as string | null) ?? null
@@ -75,6 +83,7 @@ export default async function AlugueisPage({
         view={viewParam}
         anoSelecionado={anoParam}
         anoData={(alugueiAno ?? []) as unknown as AnoResumoItem[]}
+        imoveisVigencia={(imoveisVigencia ?? []) as unknown as ImovelVigencia[]}
         profile={profile
           ? {
               nome: profile.nome ?? '',

@@ -25,7 +25,7 @@ import { DescontoModal } from './desconto-modal'
 import { IsentarModal } from './isentar-modal'
 import { ReenviarReciboModal } from './reenviar-recibo-modal'
 import { marcarReciboGerado } from '@/app/(dashboard)/alugueis/actions'
-import { CalendarioAnual, type AnoResumoItem } from './calendario-anual'
+import { CalendarioAnual, type AnoResumoItem, type ImovelVigencia } from './calendario-anual'
 import { formatarMoeda, formatarData } from '@/lib/helpers'
 import { cn } from '@/lib/utils'
 import {
@@ -326,6 +326,7 @@ export function AlugueisClient({
   view = 'lista',
   anoSelecionado,
   anoData = [],
+  imoveisVigencia = [],
 }: {
   alugueis: AluguelItem[]
   mesSelecionado: string
@@ -334,6 +335,7 @@ export function AlugueisClient({
   view?: string
   anoSelecionado?: string
   anoData?: AnoResumoItem[]
+  imoveisVigencia?: ImovelVigencia[]
 }) {
   const router = useRouter()
 
@@ -763,6 +765,7 @@ export function AlugueisClient({
         <CalendarioAnual
           data={anoData}
           ano={parseInt(anoSelecionado ?? mesSelecionado.slice(0, 4))}
+          imoveis={imoveisVigencia}
         />
       )}
 

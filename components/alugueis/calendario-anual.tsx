@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight,
@@ -14,6 +16,16 @@ export type AnoResumoItem = {
   mes_referencia: string // YYYY-MM-DD (stored as first of month)
 }
 
+// Dados de vigência do imóvel — usados apenas para projeção visual.
+// Não representam registros na tabela alugueis.
+export type ImovelVigencia = {
+  id: string
+  valor_aluguel: number
+  data_inicio_contrato: string | null
+  data_fim_contrato: string | null
+  contrato_indeterminado: boolean
+}
+
 type MesStats = {
   mes: string       // YYYY-MM
   total: number
@@ -25,7 +37,7 @@ type MesStats = {
   qtdAtrasado: number
 }
 
-type Variant = 'pago' | 'parcial' | 'atrasado' | 'pendente' | 'futuro' | 'vazio'
+type Variant = 'pago' | 'parcial' | 'atrasado' | 'pendente' | 'futuro' | 'vazio' | 'previsto'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,6 +81,17 @@ const VARIANT_CFG: Record<Variant, {
     valueColor: 'text-amber-700',
     icon:       <Clock className="h-2.5 w-2.5" />,
   },
+  // Meses 'previsto' são projeções visuais baseadas na vigência do imóvel.
+  // Não existem na tabela alugueis.
+  // São exibidos apenas no CalendarioAnual para dar ao proprietário
+  // uma visão completa do contrato.
+  previsto: {
+    card:       'bg-white border-dashed border-slate-200 hover:border-slate-300 opacity-75 hover:opacity-100',
+    badge:      'bg-slate-100 text-slate-400',
+    label:      'Previsto',
+    valueColor: 'text-slate-400',
+    icon:       <Minus className="h-2.5 w-2.5" />,
+  },
   futuro:   {
     card:       'bg-slate-50 border-slate-100 hover:bg-slate-100/80',
     badge:      'bg-slate-100 text-slate-400',
@@ -104,26 +127,66 @@ function computeStats(data: AnoResumoItem[], ano: number): MesStats[] {
   })
 }
 
-function getVariant(s: MesStats, mesHoje: string): Variant {
-  if (s.total === 0) return s.mes > mesHoje ? 'futuro' : 'vazio'
-  if (s.qtdAtrasado > 0 && s.pago < s.total) return 'atrasado'
-  if (s.pago >= s.total) return 'pago'
-  if (s.pago > 0) return 'parcial'
-  return 'pendente'
+// Retorna a soma dos aluguéis projetados para um mês sem registro no banco
+function computeValorPrevisto(mesISO: string, imoveis: ImovelVigencia[]): number {
+  return imoveis
+    .filter(im => {
+      if (!im.data_inicio_contrato) return false
+      const inicio = im.data_inicio_contrato.slice(0, 7)
+      if (mesISO < inicio) return false
+      if (im.contrato_indeterminado) return true
+      if (!im.data_fim_contrato) return false
+      return mesISO <= im.data_fim_contrato.slice(0, 7)
+    })
+    .reduce((s, im) => s + im.valor_aluguel, 0)
+}
+
+function getVariant(
+  s: MesStats,
+  mesHoje: string,
+  imoveis: ImovelVigencia[],
+): Variant {
+  // Registro real existe → lógica original inalterada
+  if (s.total > 0) {
+    if (s.qtdAtrasado > 0 && s.pago < s.total) return 'atrasado'
+    if (s.pago >= s.total) return 'pago'
+    if (s.pago > 0) return 'parcial'
+    return 'pendente'
+  }
+
+  // Sem registro — meses passados/atuais: vazio
+  if (s.mes <= mesHoje) return 'vazio'
+
+  // Mês futuro — verificar se algum imóvel tem vigência ativa
+  const temVigencia = imoveis.some(im => {
+    if (!im.data_inicio_contrato) return false
+    const inicio = im.data_inicio_contrato.slice(0, 7)
+    if (s.mes < inicio) return false
+    if (im.contrato_indeterminado) return true
+    if (!im.data_fim_contrato) return false
+    return s.mes <= im.data_fim_contrato.slice(0, 7)
+  })
+
+  return temVigencia ? 'previsto' : 'futuro'
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function CalendarioAnual({ data, ano }: {
+export function CalendarioAnual({
+  data,
+  ano,
+  imoveis = [],
+}: {
   data: AnoResumoItem[]
   ano: number
+  imoveis?: ImovelVigencia[]
 }) {
   const stats = computeStats(data, ano)
 
   const hoje = new Date()
   const mesHoje = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
 
-  // Annual totals (only months with data)
+  // Annual totals (only months with real records)
   const totalAnual = stats.reduce((s, m) => s + m.total, 0)
   const pagoAnual  = stats.reduce((s, m) => s + m.pago, 0)
   const pctAnual   = totalAnual > 0 ? Math.round((pagoAnual / totalAnual) * 100) : 0
@@ -167,17 +230,25 @@ export function CalendarioAnual({ data, ano }: {
       {/* ── Grade de 12 meses ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
         {stats.map((s, i) => {
-          const variant = getVariant(s, mesHoje)
-          const cfg = VARIANT_CFG[variant]
-          const isAtual = s.mes === mesHoje
+          const variant  = getVariant(s, mesHoje, imoveis)
+          const cfg      = VARIANT_CFG[variant]
+          const isAtual  = s.mes === mesHoje
+          const isPrevisto = variant === 'previsto'
 
-          // Valor a mostrar: se parcial, mostra o pago; senão mostra o total
-          const valorExibido = s.pago > 0 ? s.pago : s.total
+          // Valor a exibir:
+          // - Registro real parcial: valor pago
+          // - Registro real: total
+          // - Previsto: projeção calculada (sem registro no banco)
+          const valorPrevisto = isPrevisto ? computeValorPrevisto(s.mes, imoveis) : 0
+          const valorExibido  = isPrevisto ? valorPrevisto : (s.pago > 0 ? s.pago : s.total)
 
           return (
             <Link
               key={s.mes}
               href={`/alugueis?mes=${s.mes}`}
+              title={isPrevisto
+                ? 'Aluguel previsto com base na vigência do contrato. O registro será criado quando o mês chegar.'
+                : undefined}
               className={cn(
                 'relative rounded-xl border p-4 flex flex-col gap-2.5 transition-all',
                 cfg.card,
@@ -188,7 +259,9 @@ export function CalendarioAnual({ data, ano }: {
               <div className="flex items-start justify-between gap-1">
                 <span className={cn(
                   'text-sm font-semibold leading-tight',
-                  variant === 'vazio' || variant === 'futuro' ? 'text-slate-400' : 'text-slate-800',
+                  variant === 'vazio' || variant === 'futuro' ? 'text-slate-400'
+                    : variant === 'previsto' ? 'text-slate-500'
+                    : 'text-slate-800',
                 )}>
                   {MESES[i]}
                 </span>
@@ -201,13 +274,13 @@ export function CalendarioAnual({ data, ano }: {
 
               {/* Valor */}
               <div>
-                {s.total > 0 ? (
+                {valorExibido > 0 ? (
                   <>
                     <p className={cn('text-base font-bold leading-tight', cfg.valueColor)}>
                       {formatarMoeda(valorExibido)}
                     </p>
                     {/* Se parcial, mostra total riscado */}
-                    {s.pago > 0 && s.pago < s.total && (
+                    {!isPrevisto && s.pago > 0 && s.pago < s.total && (
                       <p className="text-[11px] text-slate-400 line-through leading-tight">
                         {formatarMoeda(s.total)}
                       </p>
@@ -218,16 +291,19 @@ export function CalendarioAnual({ data, ano }: {
                 )}
               </div>
 
-              {/* Status badge + contador */}
+              {/* Status badge — sem contador para meses previstos */}
               <div className="flex items-center gap-1.5">
                 <span className={cn(
-                  'inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
-                  cfg.badge,
+                  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-semibold',
+                  isPrevisto
+                    ? 'text-[10px] uppercase tracking-[0.05em] border border-dashed border-slate-300 text-slate-400'
+                    : 'text-[10px]',
+                  !isPrevisto && cfg.badge,
                 )}>
-                  {cfg.icon}
+                  {!isPrevisto && cfg.icon}
                   {cfg.label}
                 </span>
-                {s.qtdTotal > 0 && (
+                {!isPrevisto && s.qtdTotal > 0 && (
                   <span className="text-[10px] text-slate-400">
                     {s.qtdPago}/{s.qtdTotal}
                   </span>
@@ -241,21 +317,16 @@ export function CalendarioAnual({ data, ano }: {
       {/* ── Legenda ── */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3 border-t border-slate-100 bg-slate-50/40">
         {([
-          ['pago', 'Recebido'],
-          ['parcial', 'Parcial'],
-          ['atrasado', 'Atrasado'],
-          ['pendente', 'Pendente'],
-          ['futuro', 'Futuro'],
-        ] as [Variant, string][]).map(([v, lbl]) => (
+          ['pago',     'Recebido',  'bg-emerald-400'],
+          ['parcial',  'Parcial',   'bg-blue-400'],
+          ['atrasado', 'Atrasado',  'bg-red-400'],
+          ['pendente', 'Pendente',  'bg-amber-400'],
+          ['previsto', 'Previsto',  'bg-slate-300 border border-dashed border-slate-400'],
+          ['futuro',   'Futuro',    'bg-slate-200'],
+        ] as [string, string, string][]).map(([v, lbl, dot]) => (
           <div key={v} className="flex items-center gap-1.5">
-            <span className={cn('h-2 w-2 rounded-full', {
-              'bg-emerald-400': v === 'pago',
-              'bg-blue-400':    v === 'parcial',
-              'bg-red-400':     v === 'atrasado',
-              'bg-amber-400':   v === 'pendente',
-              'bg-slate-300':   v === 'futuro',
-            })} />
-            <span className="text-[11px] text-slate-500">{lbl}</span>
+            <span className={cn('h-2 w-2 rounded-full', dot)} />
+            <span className={cn('text-[11px]', v === 'previsto' ? 'text-slate-400' : 'text-slate-500')}>{lbl}</span>
           </div>
         ))}
         <span className="text-[11px] text-slate-400 ml-auto">Clique no mês para ver detalhes</span>
