@@ -15,10 +15,6 @@ export type ImovelInput = {
   indice_reajuste: 'igpm' | 'ipca' | 'fixo'
   percentual_fixo: number | null
   observacoes: string | null
-  billing_mode: 'MANUAL' | 'AUTOMATIC'
-  multa_percentual: number
-  juros_percentual: number
-  desconto_percentual: number
   vigencia_meses: number | null
   data_fim_contrato: string | null
   contrato_indeterminado: boolean
@@ -32,7 +28,14 @@ export async function criarImovel(input: ImovelInput): Promise<{ error?: string 
 
   const { data: inserted, error } = await supabase
     .from('imoveis')
-    .insert({ user_id: user.id, ...input })
+    .insert({
+      user_id: user.id,
+      ...input,
+      billing_mode: 'MANUAL',
+      multa_percentual: 2,
+      juros_percentual: 1,
+      desconto_percentual: 0,
+    })
     .select('id')
     .single()
   if (error) return { error: error.message }
@@ -102,6 +105,30 @@ export async function editarImovel(id: string, input: ImovelInput): Promise<{ er
   revalidatePath('/imoveis')
   revalidatePath('/alugueis')
   revalidatePath('/dashboard')
+  return {}
+}
+
+export async function configurarCobranca(
+  id: string,
+  config: {
+    billing_mode: 'MANUAL' | 'AUTOMATIC'
+    multa_percentual: number
+    juros_percentual: number
+    desconto_percentual: number
+  },
+): Promise<{ error?: string }> {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autorizado' }
+
+  const { error } = await supabase
+    .from('imoveis')
+    .update(config)
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/imoveis')
   return {}
 }
 

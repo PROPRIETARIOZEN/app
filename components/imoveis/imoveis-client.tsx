@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import {
   Plus, Building2, Home, Square, Briefcase, MapPin,
   Zap, Loader2, MoreHorizontal, LayoutGrid, List,
-  CheckCircle2, Clock, AlertTriangle, Pencil, Archive, LogOut,
+  CheckCircle2, Clock, AlertTriangle, Pencil, Archive, LogOut, Settings2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { ImovelModal } from '@/components/imoveis/imovel-modal'
 import { EncerrarContratoModal } from '@/components/imoveis/encerrar-contrato-modal'
+import { CobrancaConfigModal } from '@/components/imoveis/cobranca-config-modal'
 import { arquivarImovel } from '@/app/(dashboard)/imoveis/actions'
 import { formatarMoeda, formatarData } from '@/lib/helpers'
 import { LIMITES_PLANO } from '@/lib/stripe'
@@ -139,6 +140,7 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
   const [open, setOpen]               = useState(false)
   const [editando, setEditando]                 = useState<Imovel | null>(null)
   const [encerrando, setEncerrando]             = useState<Imovel | null>(null)
+  const [configCobranca, setConfigCobranca]     = useState<Imovel | null>(null)
   const [upgradeOpen, setUpgradeOpen]           = useState(false)
   const [loadingCheckout, setLoadingCheckout] = useState(false)
   const [view, setView]               = useState<'grid' | 'list'>('grid')
@@ -275,9 +277,12 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
                       <DropdownMenuTrigger className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-emerald-200/60 transition-colors text-[#059669]">
                         <MoreHorizontal className="h-4 w-4" />
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-48">
+                      <DropdownMenuContent align="start" className="w-52">
                         <DropdownMenuItem onClick={() => handleEditar(imovel)}>
-                          <Pencil className="h-3.5 w-3.5 mr-2" />Editar
+                          <Pencil className="h-3.5 w-3.5 mr-2" />Editar imóvel
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setConfigCobranca(imovel)}>
+                          <Settings2 className="h-3.5 w-3.5 mr-2" />Configurar cobrança
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => router.push('/alugueis')}>
                           <Building2 className="h-3.5 w-3.5 mr-2" />Ver aluguéis
@@ -455,9 +460,12 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
                         <DropdownMenuTrigger className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 transition-colors text-[#64748B]">
                           <MoreHorizontal className="h-4 w-4" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuContent align="end" className="w-52">
                           <DropdownMenuItem onClick={() => handleEditar(imovel)}>
-                            <Pencil className="h-3.5 w-3.5 mr-2" />Editar
+                            <Pencil className="h-3.5 w-3.5 mr-2" />Editar imóvel
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setConfigCobranca(imovel)}>
+                            <Settings2 className="h-3.5 w-3.5 mr-2" />Configurar cobrança
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => router.push('/alugueis')}>
                             <Building2 className="h-3.5 w-3.5 mr-2" />Ver aluguéis
@@ -488,7 +496,14 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
       )}
 
       {/* ── Modais ───────────────────────────────────────────────────────── */}
-      <ImovelModal open={open} onOpenChange={setOpen} imovel={editando} plano={plano} />
+      <ImovelModal open={open} onOpenChange={setOpen} imovel={editando} />
+
+      <CobrancaConfigModal
+        open={!!configCobranca}
+        onOpenChange={v => { if (!v) setConfigCobranca(null) }}
+        imovel={configCobranca}
+        plano={plano}
+      />
 
       <EncerrarContratoModal
         imovel={encerrando}
