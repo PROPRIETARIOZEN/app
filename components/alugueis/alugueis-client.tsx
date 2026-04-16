@@ -1052,6 +1052,7 @@ export function AlugueisClient({
           aluguel={cobrancaAluguel}
           pixKey={profile.pix_key ?? null}
           pixKeyTipo={profile.pix_key_tipo ?? null}
+          nomeProprietario={profile.nome}
           open={cobrancaOpen}
           onClose={() => setCobrancaOpen(false)}
           loadingCobranca={loadingCobranca === cobrancaAluguel.id}

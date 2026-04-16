@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatarMoeda } from '@/lib/helpers'
+import { gerarPayloadPix } from '@/lib/pix'
 import type { AluguelItem } from './alugueis-client'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ interface Props {
   aluguel: AluguelItem
   pixKey: string | null
   pixKeyTipo: string | null
+  nomeProprietario: string
   open: boolean
   onClose: () => void
   loadingCobranca: boolean
@@ -166,6 +168,8 @@ function SecaoAutoComCharge({ aluguel, loading, loadingEmail, inquilinoEmail, on
 function SecaoManualComPix({
   pixKey,
   pixKeyTipo,
+  nomeProprietario,
+  valor,
   inquilinoEmail,
   loadingEmail,
   onRegistrar,
@@ -173,6 +177,8 @@ function SecaoManualComPix({
 }: {
   pixKey: string
   pixKeyTipo: string | null
+  nomeProprietario: string
+  valor: number
   inquilinoEmail: string | null
   loadingEmail: boolean
   onRegistrar: () => void
@@ -183,12 +189,14 @@ function SecaoManualComPix({
 
   useEffect(() => {
     if (!pixKey) return
+    // Gera payload EMV válido para PIX (não apenas a chave bruta)
+    const payload = gerarPayloadPix({ chave: pixKey, nomeRecebedor: nomeProprietario, valor })
     import('qrcode').then(mod => {
-      mod.default.toDataURL(pixKey, { width: 200, margin: 2 })
+      mod.default.toDataURL(payload, { width: 200, margin: 2 })
         .then(url => setQrDataUrl(url))
         .catch(() => setQrDataUrl(null))
     })
-  }, [pixKey])
+  }, [pixKey, nomeProprietario, valor])
 
   return (
     <div className="space-y-4 py-2">
@@ -291,6 +299,7 @@ export function CobrancaModal({
   aluguel,
   pixKey,
   pixKeyTipo,
+  nomeProprietario,
   open,
   onClose,
   loadingCobranca,
@@ -305,6 +314,7 @@ export function CobrancaModal({
   const isAutomatic = aluguel.imovel?.billing_mode === 'AUTOMATIC'
   const temCharge = !!aluguel.asaas_charge_id
   const inquilinoEmail = aluguel.inquilino?.email ?? null
+  const valorEfetivo = aluguel.valor - (aluguel.desconto ?? 0)
 
   function renderContent() {
     if (isAutomatic) {
@@ -334,6 +344,8 @@ export function CobrancaModal({
         <SecaoManualComPix
           pixKey={pixKey}
           pixKeyTipo={pixKeyTipo}
+          nomeProprietario={nomeProprietario}
+          valor={valorEfetivo}
           inquilinoEmail={inquilinoEmail}
           loadingEmail={loadingEmail}
           onRegistrar={onRegistrarPagamento}

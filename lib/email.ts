@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { formatarMoeda, formatarMesReferencia, formatarData } from './helpers'
+import { gerarPayloadPix } from './pix'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -361,7 +362,7 @@ export async function enviarCobrancaParaInquilino(p: CobrancaInquilinoParams) {
   let pixManualBlock = ''
   if (!isAutomatic && p.pixKey) {
     const qrImg = `<div style="text-align:center;margin:16px 0;">
-           <img src="${qrCodeUrl(p.pixKey)}" alt="QR Code PIX"
+           <img src="${qrCodeUrl(gerarPayloadPix({ chave: p.pixKey, nomeRecebedor: p.nomeProprietario, valor: p.valor }))}" alt="QR Code PIX"
                 width="180" height="180"
                 style="border-radius:8px;border:1px solid #e5e7eb;padding:8px;background:#fff;" />
            <p style="margin:6px 0 0;font-size:11px;color:#9ca3af;">Aponte a câmera do celular para pagar</p>
@@ -466,7 +467,7 @@ export async function enviarLembreteInquilino(p: LembreteInquilinoParams) {
          <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.5px;">Chave PIX</p>
          <p style="margin:0 0 12px;font-size:15px;font-family:monospace;font-weight:700;color:#14532d;word-break:break-all;">${p.pixKey}</p>
          <div style="text-align:center;">
-           <img src="${qrCodeUrl(p.pixKey)}" alt="QR Code PIX" width="160" height="160"
+           <img src="${qrCodeUrl(gerarPayloadPix({ chave: p.pixKey, nomeRecebedor: p.nomeProprietario, valor: p.valor }))}" alt="QR Code PIX" width="160" height="160"
                 style="border-radius:8px;border:1px solid #e5e7eb;padding:6px;background:#fff;" />
          </div>
        </div>`
