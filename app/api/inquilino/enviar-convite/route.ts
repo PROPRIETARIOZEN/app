@@ -47,7 +47,10 @@ export async function POST(req: NextRequest) {
   const token = await criarOuBuscarTokenInquilino(inquilinoId, user.id)
 
   const imovel = inquilino.imovel as { apelido: string; endereco: string } | null
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://proprietariozen.com.br'
+  const _raw   = process.env.NEXT_PUBLIC_APP_URL ?? ''
+  const appUrl = _raw && !_raw.includes('localhost') && !_raw.includes('127.0.0.1')
+    ? _raw
+    : 'https://proprietariozen.com.br'
   const link = `${appUrl}/inquilino/${token}`
 
   // Envia e-mail — erros surfacam com mensagem clara para o cliente

@@ -7,7 +7,12 @@ const FROM =
   process.env.RESEND_FROM_EMAIL ??
   'ProprietarioZen <noreply@proprietariozen.com.br>'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://proprietariozen.com.br'
+const PROD_URL = 'https://proprietariozen.com.br'
+const _envUrl  = process.env.NEXT_PUBLIC_APP_URL ?? ''
+// Ignora valores de localhost — evita links quebrados em emails de produção
+const APP_URL  = _envUrl && !_envUrl.includes('localhost') && !_envUrl.includes('127.0.0.1')
+  ? _envUrl
+  : PROD_URL
 
 // ─── Helper interno de envio com log ─────────────────────────────────────────
 
