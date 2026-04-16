@@ -64,10 +64,40 @@ export default async function InquilinoPage({ params }: PageProps) {
   const dados: DadosPagina = await res.json()
   const { inquilino, imovel, proprietario, proximoVencimento, historico, documentos } = dados
 
-  const statusConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
-    pendente: { label: 'Pendente', bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
-    atrasado: { label: 'Atrasado', bg: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200' },
+  // Determina o visual do card de vencimento com base na data real,
+  // não apenas no status do banco (o cron pode ter lag de 1 dia).
+  function resolverCardVencimento(aluguel: DadosPagina['proximoVencimento']) {
+    if (!aluguel) return null
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+    const venc  = new Date(aluguel.data_vencimento + 'T00:00:00')
+    const passou = venc < hoje
+
+    if (aluguel.status === 'atrasado' || (aluguel.status === 'pendente' && passou)) {
+      return {
+        label:  'Pagamento pendente',
+        sublabel: `Venceu em ${formatarData(aluguel.data_vencimento)}`,
+        bg:     'bg-amber-50',
+        border: 'border-amber-200',
+        text:   'text-amber-700',
+      }
+    }
+    // pendente com data futura
+    const diasRestantes = Math.round((venc.getTime() - hoje.getTime()) / 86_400_000)
+    const sublabel = diasRestantes === 0
+      ? 'Vence hoje'
+      : diasRestantes === 1
+        ? 'Vence amanhã'
+        : `Vence em ${formatarData(aluguel.data_vencimento)}`
+    return {
+      label:    'Próxima fatura',
+      sublabel,
+      bg:       'bg-blue-50',
+      border:   'border-blue-100',
+      text:     'text-blue-600',
+    }
   }
+
+  const cardVenc = resolverCardVencimento(proximoVencimento)
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -81,32 +111,29 @@ export default async function InquilinoPage({ params }: PageProps) {
       <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
 
         {/* Próximo vencimento */}
-        {proximoVencimento && (() => {
-          const cfg = statusConfig[proximoVencimento.status] ?? statusConfig.pendente
-          return (
-            <section className={`rounded-2xl border p-5 ${cfg.bg} ${cfg.border}`}>
-              <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${cfg.text}`}>
-                {cfg.label} · {formatarMes(proximoVencimento.mes_referencia)}
-              </p>
-              <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {formatarMoeda(proximoVencimento.valor)}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Vence em {formatarData(proximoVencimento.data_vencimento)}
-                  </p>
-                </div>
-                {imovel && (
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-700">{imovel.apelido}</p>
-                    <p className="text-xs text-gray-400">Dia {imovel.dia_vencimento} de cada mês</p>
-                  </div>
-                )}
+        {cardVenc && proximoVencimento && (
+          <section className={`rounded-2xl border p-5 ${cardVenc.bg} ${cardVenc.border}`}>
+            <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${cardVenc.text}`}>
+              {cardVenc.label} · {formatarMes(proximoVencimento.mes_referencia)}
+            </p>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-3xl font-bold text-gray-900">
+                  {formatarMoeda(proximoVencimento.valor)}
+                </p>
+                <p className={`text-sm mt-1 ${cardVenc.text}`}>
+                  {cardVenc.sublabel}
+                </p>
               </div>
-            </section>
-          )
-        })()}
+              {imovel && (
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-700">{imovel.apelido}</p>
+                  <p className="text-xs text-gray-400">Dia {imovel.dia_vencimento} de cada mês</p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Sem vencimento ativo */}
         {!proximoVencimento && (
