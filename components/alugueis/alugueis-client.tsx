@@ -7,7 +7,7 @@ import {
   Banknote, Building2, ChevronLeft, ChevronRight,
   Calendar, Filter, MoreHorizontal, X, CheckCheck,
   AlertCircle, TrendingUp, Zap, Loader2, Paperclip,
-  Mail, Tag, SplitSquareHorizontal, Ban, Gift,
+  Mail, Tag, SplitSquareHorizontal, Ban, Gift, QrCode, Info,
 } from 'lucide-react'
 import { DocumentosAluguel } from '@/components/documentos/DocumentosAluguel'
 import { toast } from 'sonner'
@@ -71,6 +71,7 @@ type Profile = {
   nome: string
   email: string
   telefone: string | null
+  plano: 'gratis' | 'pago' | 'elite'
   pix_key?: string | null
   pix_key_tipo?: string | null
 }
@@ -188,33 +189,20 @@ function VencimentoCell({ aluguel }: { aluguel: AluguelItem }) {
   )
 }
 
-// Cobrança column — button that opens CobrancaModal
+// ─── Cobrança column ───────────────────────────────────────────────────────────
+
 function CobrancaButton({
   aluguel,
-  pixKey,
   onClick,
+  onReenviar,
+  loadingReenviar,
 }: {
   aluguel: AluguelItem
-  pixKey: string | null
   onClick: () => void
+  onReenviar: () => void
+  loadingReenviar: boolean
 }) {
-  // Pago: mostra método
-  if (aluguel.status === 'pago') {
-    if (aluguel.metodo_pagamento) {
-      const label = aluguel.metodo_pagamento === 'PIX' ? 'PIX'
-        : aluguel.metodo_pagamento === 'BOLETO' ? 'Boleto'
-        : aluguel.metodo_pagamento
-      return (
-        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[11px] font-semibold gap-1">
-          <CheckCircle2 className="h-2.5 w-2.5" />
-          {label}
-        </Badge>
-      )
-    }
-    return <span className="text-slate-300 text-xs">—</span>
-  }
-
-  // Cancelado / estornado
+  // Cancelado / estornado → sem ação
   if (aluguel.status === 'cancelado' || aluguel.status === 'estornado') {
     return <span className="text-slate-300 text-xs">—</span>
   }
@@ -222,62 +210,107 @@ function CobrancaButton({
   const isAutomatic = aluguel.imovel?.billing_mode === 'AUTOMATIC'
   const temCharge = !!aluguel.asaas_charge_id
 
-  // AUTOMATIC sem charge: destaque âmbar
-  if (isAutomatic && !temCharge) {
-    const semCpf = !aluguel.inquilino?.cpf
+  // ── AUTOMATIC ──────────────────────────────────────────────────────────────
+  if (isAutomatic) {
+    // Estado C — pago via Asaas
+    if (aluguel.status === 'pago') {
+      return (
+        <Badge
+          title="Confirmado automaticamente pelo Asaas"
+          className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[11px] font-semibold gap-1 cursor-default"
+        >
+          <CheckCircle2 className="h-2.5 w-2.5" />
+          Confirmado
+        </Badge>
+      )
+    }
+
+    // Estado A — sem charge gerada (CPF pode estar ausente)
+    if (!temCharge) {
+      const semCpf = !aluguel.inquilino?.cpf
+      return (
+        <button
+          onClick={e => { e.stopPropagation(); onClick() }}
+          title={semCpf ? 'Cadastre o CPF do inquilino para gerar cobrança Asaas' : undefined}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors',
+            semCpf
+              ? 'bg-red-50 border border-red-200 text-red-600 hover:bg-red-100'
+              : 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100',
+          )}
+        >
+          {semCpf
+            ? <AlertCircle className="h-2.5 w-2.5" />
+            : <QrCode className="h-2.5 w-2.5" />}
+          Gerar Pix/Boleto
+        </button>
+      )
+    }
+
+    // Estado B — charge criada, aguardando pagamento
     return (
-      <button
-        onClick={e => { e.stopPropagation(); onClick() }}
-        title={semCpf ? 'Cadastre o CPF do inquilino para gerar cobrança Asaas' : undefined}
-        className={cn(
-          'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors',
-          semCpf
-            ? 'bg-red-50 border border-red-200 text-red-600 hover:bg-red-100'
-            : 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100',
-        )}
-      >
-        {semCpf
-          ? <AlertCircle className="h-2.5 w-2.5" />
-          : <Zap className="h-2.5 w-2.5" />}
-        Gerar
-      </button>
+      <div className="flex flex-col gap-0.5">
+        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 text-[11px] font-semibold w-fit">
+          Aguardando
+        </Badge>
+        <button
+          onClick={e => { e.stopPropagation(); onClick() }}
+          className="text-[10px] text-slate-500 hover:text-slate-700 underline underline-offset-2"
+        >
+          Ver cobrança
+        </button>
+      </div>
     )
   }
 
-  // AUTOMATIC com charge: botão verde PIX/Boleto
-  if (isAutomatic && temCharge) {
+  // ── MANUAL ─────────────────────────────────────────────────────────────────
+
+  // Estado C — pago manualmente
+  if (aluguel.status === 'pago') {
     return (
-      <button
-        onClick={e => { e.stopPropagation(); onClick() }}
-        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
-      >
-        Ver PIX / Boleto
-      </button>
+      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[11px] font-semibold gap-1">
+        <CheckCircle2 className="h-2.5 w-2.5" />
+        Recebido
+      </Badge>
     )
   }
 
-  // MANUAL com PIX key: botão verde
-  if (!isAutomatic && pixKey) {
+  // Estado B — cobrança já enviada por e-mail
+  if (aluguel.lembrete_enviado_em) {
     return (
-      <button
-        onClick={e => { e.stopPropagation(); onClick() }}
-        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
-      >
-        Ver PIX
-      </button>
+      <div className="flex flex-col gap-0.5">
+        <Badge
+          title={`Cobrança enviada em ${formatarData(aluguel.lembrete_enviado_em)}`}
+          className="bg-slate-100 text-slate-600 hover:bg-slate-100 text-[11px] font-semibold gap-1 cursor-default w-fit"
+        >
+          <CheckCheck className="h-2.5 w-2.5" />
+          Enviado
+        </Badge>
+        <button
+          onClick={e => { e.stopPropagation(); onReenviar() }}
+          disabled={loadingReenviar}
+          className="text-[10px] text-slate-500 hover:text-slate-700 underline underline-offset-2 flex items-center gap-0.5"
+        >
+          {loadingReenviar ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
+          Reenviar
+        </button>
+      </div>
     )
   }
 
-  // MANUAL sem PIX key: botão neutro
+  // Estado A — pendente/atrasado sem cobrança enviada
   return (
     <button
       onClick={e => { e.stopPropagation(); onClick() }}
-      className="inline-flex items-center gap-1 rounded-md bg-slate-50 border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
+      className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
     >
-      Cobrar
+      <QrCode className="h-2.5 w-2.5" />
+      Cobrar via Pix
     </button>
   )
 }
+
+// ─── AlugueisClient ────────────────────────────────────────────────────────────
 
 export function AlugueisClient({
   alugueis,
@@ -308,11 +341,30 @@ export function AlugueisClient({
   const [loadingRecibo, setLoadingRecibo] = useState<string | null>(null)
   const [loadingCobranca, setLoadingCobranca] = useState<string | null>(null)
   const [loadingEmail, setLoadingEmail] = useState(false)
+  const [loadingReenviarId, setLoadingReenviarId] = useState<string | null>(null)
 
   // Action modals
   const [actionModal, setActionModal] = useState<ActionModal>(null)
   function abrirModal(m: ActionModal) { setActionModal(m) }
   function fecharModal() { setActionModal(null) }
+
+  // Cobrar todos modal
+  const [cobraTodosOpen, setCobraTodosOpen] = useState(false)
+  const [cobraProgresso, setCobraProgresso] = useState<{
+    feitos: number; erros: number; total: number; status: 'idle' | 'running' | 'done'
+  }>({ feitos: 0, erros: 0, total: 0, status: 'idle' })
+
+  // Banner de orientação — localStorage
+  const [bannerVisto, setBannerVisto] = useState(true) // true = hidden (evita flash no SSR)
+  useEffect(() => {
+    setBannerVisto(!!localStorage.getItem('alugueis_banner_visto'))
+  }, [])
+
+  // Tooltip pulsante nos 3 pontinhos — localStorage
+  const [menuVisto, setMenuVisto] = useState(true)
+  useEffect(() => {
+    setMenuVisto(!!localStorage.getItem('alugueis_menu_visto'))
+  }, [])
 
   // Filter state
   const [filterOpen, setFilterOpen] = useState(false)
@@ -375,6 +427,16 @@ export function AlugueisClient({
   const qtdAtrasado   = listaAlugueis.filter(a => a.status === 'atrasado').length
   const qtdCancelado  = listaAlugueis.filter(a => a.status === 'cancelado').length
   const qtdEstornado  = listaAlugueis.filter(a => a.status === 'estornado').length
+
+  // Pendentes sem cobrança enviada
+  const semCobranca = useMemo(() =>
+    listaAlugueis.filter(a =>
+      (a.status === 'pendente' || a.status === 'atrasado') && !a.lembrete_enviado_em
+    ), [listaAlugueis])
+
+  const semCobrancaComEmail = useMemo(() =>
+    semCobranca.filter(a => !!a.inquilino?.email),
+    [semCobranca])
 
   const TABS = [
     { id: 'todos'     as const, label: 'Todos',     count: alugueis.length, cls: '' },
@@ -484,6 +546,7 @@ export function AlugueisClient({
     }
   }
 
+  // Envia e-mail de cobrança a partir do CobrancaModal
   async function handleEnviarEmail(aluguel: AluguelItem) {
     setLoadingEmail(true)
     try {
@@ -494,12 +557,60 @@ export function AlugueisClient({
         return
       }
       toast.success('E-mail enviado com sucesso!')
+      atualizarAluguel(aluguel.id, { lembrete_enviado_em: new Date().toISOString() })
     } catch {
       toast.error('Erro ao enviar e-mail')
     } finally {
       setLoadingEmail(false)
     }
   }
+
+  // Reenvia e-mail diretamente do botão "Reenviar" na tabela
+  async function handleReenviarEmail(aluguel: AluguelItem) {
+    setLoadingReenviarId(aluguel.id)
+    try {
+      const res = await fetch(`/api/alugueis/${aluguel.id}/enviar-cobranca`, { method: 'POST' })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) {
+        toast.error(data.error ?? 'Erro ao reenviar e-mail')
+        return
+      }
+      toast.success('E-mail reenviado!')
+      atualizarAluguel(aluguel.id, { lembrete_enviado_em: new Date().toISOString() })
+    } catch {
+      toast.error('Erro ao reenviar e-mail')
+    } finally {
+      setLoadingReenviarId(null)
+    }
+  }
+
+  // Cobrar todos — envia e-mail em sequência para cada pendente com e-mail
+  async function handleCobrarTodos() {
+    const targets = semCobrancaComEmail
+    setCobraProgresso({ feitos: 0, erros: 0, total: targets.length, status: 'running' })
+
+    let feitos = 0, erros = 0
+    for (const aluguel of targets) {
+      try {
+        const res = await fetch(`/api/alugueis/${aluguel.id}/enviar-cobranca`, { method: 'POST' })
+        if (res.ok) {
+          feitos++
+          atualizarAluguel(aluguel.id, { lembrete_enviado_em: new Date().toISOString() })
+        } else {
+          erros++
+        }
+      } catch {
+        erros++
+      }
+      setCobraProgresso({ feitos, erros, total: targets.length, status: 'running' })
+    }
+    setCobraProgresso({ feitos, erros, total: targets.length, status: 'done' })
+  }
+
+  // ── Banner config ───────────────────────────────────────────────────────────
+  const nenhumLembreteEnviado = listaAlugueis.every(a => !a.lembrete_enviado_em)
+  const mostrarBanner = !bannerVisto && nenhumLembreteEnviado && listaAlugueis.length > 0
+  const planoPago = profile.plano === 'pago' || profile.plano === 'elite'
 
   return (
     <>
@@ -522,8 +633,28 @@ export function AlugueisClient({
           </p>
         </div>
 
-        {/* Right controls: month nav + filter */}
+        {/* Right controls: cobrar todos + month nav + filter */}
         <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Cobrar todos — aparece quando há pendentes sem cobrança */}
+          {semCobranca.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 px-2.5 py-0.5 text-xs font-semibold">
+                <AlertCircle className="h-3 w-3" />
+                {semCobranca.length} sem cobrança
+              </span>
+              <button
+                onClick={() => {
+                  setCobraProgresso({ feitos: 0, erros: 0, total: 0, status: 'idle' })
+                  setCobraTodosOpen(true)
+                }}
+                className="text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md px-2 py-0.5 transition-colors"
+              >
+                Cobrar todos
+              </button>
+            </div>
+          )}
+
           {/* Month navigation */}
           <div className="flex items-center gap-1">
             <Button
@@ -653,6 +784,38 @@ export function AlugueisClient({
         />
       </div>
 
+      {/* Banner de orientação — primeira vez na página, sem nenhuma cobrança enviada */}
+      {mostrarBanner && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-3">
+          <Info className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            {planoPago ? (
+              <p className="text-sm text-emerald-800 leading-relaxed">
+                <span className="font-semibold">Como funciona:</span>{' '}
+                clique em <span className="font-medium">&ldquo;Gerar Pix/Boleto&rdquo;</span> para criar a cobrança automática.
+                O pagamento será confirmado automaticamente quando o inquilino pagar.
+              </p>
+            ) : (
+              <p className="text-sm text-emerald-800 leading-relaxed">
+                <span className="font-semibold">Como cobrar seu inquilino:</span>{' '}
+                clique em <span className="font-medium">&ldquo;Cobrar via Pix&rdquo;</span> na linha do aluguel para gerar o
+                QR Code e enviar por e-mail. Após receber, clique em{' '}
+                <span className="font-medium">⋯ → Registrar pagamento</span> para confirmar.
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              localStorage.setItem('alugueis_banner_visto', '1')
+              setBannerVisto(true)
+            }}
+            className="shrink-0 flex items-center justify-center h-5 w-5 rounded-full text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Table card */}
       {listaAlugueis.length === 0 ? (
         <Card>
@@ -705,7 +868,7 @@ export function AlugueisClient({
                 <p className="text-xs text-slate-400">Tente remover algum filtro aplicado.</p>
               </div>
             ) : (
-              paginados.map(aluguel => {
+              paginados.map((aluguel, rowIndex) => {
                 const st = STATUS_CONFIG[aluguel.status]
                 const nomeInq = aluguel.inquilino?.nome ?? 'Sem inquilino'
                 const iniciais = nomeInq.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
@@ -713,6 +876,8 @@ export function AlugueisClient({
                 const isFinalizado = aluguel.status === 'cancelado' || aluguel.status === 'estornado'
                 const isSelected = selecionados.has(aluguel.id)
                 const isDocOpen = abrirDocumentos === aluguel.id
+                // Tooltip pulsante: só no primeiro item da primeira página quando menu nunca foi aberto
+                const isPrimeiro = !menuVisto && rowIndex === 0 && paginaAtual === 1
 
                 function toggleDocumentos() {
                   setAbrirDocumentos(prev => prev === aluguel.id ? null : aluguel.id)
@@ -795,8 +960,9 @@ export function AlugueisClient({
                     <div className="mb-2 md:mb-0">
                       <CobrancaButton
                         aluguel={aluguel}
-                        pixKey={profile.pix_key ?? null}
                         onClick={() => handleAbrirCobranca(aluguel)}
+                        onReenviar={() => handleReenviarEmail(aluguel)}
+                        loadingReenviar={loadingReenviarId === aluguel.id}
                       />
                     </div>
 
@@ -827,12 +993,28 @@ export function AlugueisClient({
 
                     {/* Ações dropdown */}
                     <div className="flex items-center">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </DropdownMenuTrigger>
+                      <DropdownMenu
+                        onOpenChange={open => {
+                          if (open && isPrimeiro) {
+                            localStorage.setItem('alugueis_menu_visto', '1')
+                            setMenuVisto(true)
+                          }
+                        }}
+                      >
+                        <div className="relative">
+                          {/* Anel pulsante — apenas no primeiro item quando menu nunca foi aberto */}
+                          {isPrimeiro && (
+                            <span className="absolute inset-0 rounded-md bg-emerald-400/25 animate-ping pointer-events-none" />
+                          )}
+                          <DropdownMenuTrigger
+                            className={cn(
+                              'inline-flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-opacity',
+                              isPrimeiro ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                            )}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                        </div>
                         <DropdownMenuContent align="end" className="w-56">
 
                           {/* ── ATRASADO ── */}
@@ -1017,6 +1199,7 @@ export function AlugueisClient({
         </Card>
       )}
 
+      {/* ── Modais de ação ── */}
       <PagarModal open={modalOpen} onOpenChange={setModalOpen} aluguel={pagando} />
 
       <PagamentoParcialModal
@@ -1082,37 +1265,106 @@ export function AlugueisClient({
         />
       )}
 
-      {/* Bulk action bar */}
-      {selecionados.size > 0 && (
+      {/* ── Modal Cobrar Todos ── */}
+      {cobraTodosOpen && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-slate-900 text-white rounded-xl shadow-xl"
-          style={{ animation: 'slideUp 0.2s ease-out' }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+          onClick={() => { if (cobraProgresso.status !== 'running') setCobraTodosOpen(false) }}
         >
-          <span className="text-sm font-medium">
-            {selecionados.size} registro{selecionados.size !== 1 ? 's' : ''} selecionado{selecionados.size !== 1 ? 's' : ''}
-          </span>
-
-          {/* "Marcar como pagos" only if all selected are pending/overdue */}
-          {Array.from(selecionados).every(id => {
-            const a = listaAlugueis.find(x => x.id === id)
-            return a && a.status !== 'pago'
-          }) && (
-            <Button
-              size="sm"
-              className="h-7 bg-emerald-500 hover:bg-emerald-400 text-white border-0 gap-1.5 text-xs"
-              onClick={limparSelecao}
-            >
-              <CheckCheck className="h-3.5 w-3.5" />
-              Marcar como pagos
-            </Button>
-          )}
-
-          <button
-            onClick={limparSelecao}
-            className="h-7 w-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+          <div
+            className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
           >
-            <X className="h-3.5 w-3.5" />
-          </button>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100">
+              <p className="font-semibold text-slate-900">Cobrar todos</p>
+              {cobraProgresso.status !== 'running' && (
+                <button
+                  onClick={() => setCobraTodosOpen(false)}
+                  className="flex items-center justify-center h-7 w-7 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Body */}
+            <div className="px-5 pb-5 pt-4 space-y-4">
+
+              {/* Confirmação */}
+              {cobraProgresso.status === 'idle' && (
+                <>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    Você tem{' '}
+                    <strong>{semCobranca.length}</strong>{' '}
+                    aluguel{semCobranca.length !== 1 ? 'is' : ''} pendente{semCobranca.length !== 1 ? 's' : ''} sem cobrança enviada.
+                    {semCobranca.length > semCobrancaComEmail.length && (
+                      <span className="text-slate-400">
+                        {' '}({semCobranca.length - semCobrancaComEmail.length} sem e-mail cadastrado)
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    Deseja enviar o Pix por e-mail para{' '}
+                    <strong>
+                      {semCobrancaComEmail.length} inquilino{semCobrancaComEmail.length !== 1 ? 's' : ''}
+                    </strong>{' '}
+                    com e-mail cadastrado?
+                  </p>
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
+                    onClick={handleCobrarTodos}
+                    disabled={semCobrancaComEmail.length === 0}
+                  >
+                    <Mail className="h-4 w-4" />
+                    Enviar para {semCobrancaComEmail.length} inquilino{semCobrancaComEmail.length !== 1 ? 's' : ''}
+                  </Button>
+                  {semCobrancaComEmail.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center">
+                      Nenhum inquilino com e-mail cadastrado. Cadastre os e-mails em Imóveis para usar esta função.
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* Progresso */}
+              {cobraProgresso.status === 'running' && (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+                  <p className="text-sm text-slate-700 text-center">
+                    Enviando {Math.min(cobraProgresso.feitos + cobraProgresso.erros + 1, cobraProgresso.total)} de {cobraProgresso.total}...
+                  </p>
+                  <p className="text-xs text-slate-400">{cobraProgresso.feitos} enviado{cobraProgresso.feitos !== 1 ? 's' : ''} até agora</p>
+                </div>
+              )}
+
+              {/* Resultado */}
+              {cobraProgresso.status === 'done' && (
+                <>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-1.5">
+                    <p className="text-sm font-semibold text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      {cobraProgresso.feitos} e-mail{cobraProgresso.feitos !== 1 ? 's' : ''} enviado{cobraProgresso.feitos !== 1 ? 's' : ''}
+                    </p>
+                    {cobraProgresso.erros > 0 && (
+                      <p className="text-xs text-amber-700">
+                        {cobraProgresso.erros} não enviado{cobraProgresso.erros !== 1 ? 's' : ''} — verifique os e-mails
+                      </p>
+                    )}
+                    {semCobranca.length > semCobrancaComEmail.length && (
+                      <p className="text-xs text-slate-500">
+                        {semCobranca.length - semCobrancaComEmail.length} sem e-mail — não foram notificados
+                      </p>
+                    )}
+                  </div>
+                  <Button variant="outline" className="w-full" onClick={() => setCobraTodosOpen(false)}>
+                    Fechar
+                  </Button>
+                </>
+              )}
+
+            </div>
+          </div>
         </div>
       )}
     </>

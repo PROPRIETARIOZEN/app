@@ -43,7 +43,7 @@ export default async function AlugueisPage({
 
     supabase
       .from('profiles')
-      .select('nome, email, telefone')
+      .select('nome, email, telefone, plano')
       .eq('id', user.id)
       .single(),
   ])
@@ -57,8 +57,15 @@ export default async function AlugueisPage({
         alugueis={(alugueis ?? []) as unknown as AluguelItem[]}
         mesSelecionado={mesParam}
         profile={profile
-          ? { ...profile, pix_key, pix_key_tipo }
-          : { nome: '', email: user.email ?? '', telefone: null, pix_key, pix_key_tipo }
+          ? {
+              nome: profile.nome ?? '',
+              email: profile.email ?? (user.email ?? ''),
+              telefone: profile.telefone ?? null,
+              plano: (profile.plano as 'gratis' | 'pago' | 'elite') ?? 'gratis',
+              pix_key,
+              pix_key_tipo,
+            }
+          : { nome: '', email: user.email ?? '', telefone: null, plano: 'gratis' as const, pix_key, pix_key_tipo }
         }
       />
     </div>

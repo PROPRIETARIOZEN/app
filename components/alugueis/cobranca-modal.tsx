@@ -140,8 +140,7 @@ function SecaoAutoComCharge({ aluguel, loading, loadingEmail, inquilinoEmail, on
       {/* Enviar por e-mail */}
       {inquilinoEmail ? (
         <Button
-          variant="outline"
-          className="w-full gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+          className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
           onClick={onEnviarEmail}
           disabled={loadingEmail}
         >
@@ -189,7 +188,6 @@ function SecaoManualComPix({
 
   useEffect(() => {
     if (!pixKey) return
-    // Gera payload EMV válido para PIX (não apenas a chave bruta)
     const payload = gerarPayloadPix({ chave: pixKey, nomeRecebedor: nomeProprietario, valor })
     import('qrcode').then(mod => {
       mod.default.toDataURL(payload, { width: 200, margin: 2 })
@@ -200,15 +198,19 @@ function SecaoManualComPix({
 
   return (
     <div className="space-y-4 py-2">
-      {/* QR Code */}
+      {/* Título da seção */}
+      <p className="text-sm font-semibold text-slate-700">Envie o Pix para o inquilino</p>
+
+      {/* QR Code + valor */}
       {qrDataUrl && (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={qrDataUrl}
             alt="QR Code PIX"
             className="h-44 w-44 rounded-xl border border-slate-200 p-2 bg-white"
           />
+          <p className="text-lg font-bold text-slate-900">{formatarMoeda(valor)}</p>
         </div>
       )}
 
@@ -236,28 +238,30 @@ function SecaoManualComPix({
       {/* Enviar por e-mail */}
       {inquilinoEmail ? (
         <Button
-          variant="outline"
-          className="w-full gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+          className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
           onClick={onEnviarEmail}
           disabled={loadingEmail}
         >
           {loadingEmail
             ? <Loader2 className="h-4 w-4 animate-spin" />
             : <Mail className="h-4 w-4" />}
-          Enviar para {inquilinoEmail}
+          Enviar por e-mail para {inquilinoEmail}
         </Button>
       ) : (
-        <p className="text-xs text-slate-400 text-center">
-          Inquilino sem e-mail cadastrado — não é possível enviar por e-mail.
-        </p>
+        <Button
+          variant="outline"
+          className="w-full gap-2 text-slate-400"
+          disabled
+          title="Cadastre o e-mail do inquilino para enviar"
+        >
+          <Mail className="h-4 w-4" />
+          Enviar por e-mail
+        </Button>
       )}
 
-      <p className="text-xs text-slate-500 text-center">
-        Após o inquilino realizar o pagamento, registre-o abaixo.
-      </p>
-
-      <Button className="w-full gap-2" onClick={onRegistrar}>
-        Registrar pagamento recebido
+      {/* Rodapé */}
+      <Button variant="ghost" className="w-full gap-2 text-slate-500 text-sm" onClick={onRegistrar}>
+        Registrar pagamento manual
       </Button>
     </div>
   )
@@ -369,17 +373,14 @@ export function CobrancaModal({
         {/* Header */}
         <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-slate-100">
           <div className="space-y-0.5 min-w-0 pr-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {labelMes(aluguel.mes_referencia)} · {aluguel.imovel?.apelido ?? '—'}
-            </p>
-            <p className="text-2xl font-bold text-slate-900">
-              {formatarMoeda(aluguel.valor)}
+            <p className="text-base font-bold text-slate-900">
+              Cobrar aluguel{aluguel.inquilino?.nome ? ` de ${aluguel.inquilino.nome}` : ''}
             </p>
             <p className="text-xs text-slate-500">
+              {aluguel.imovel?.apelido ?? '—'} · {labelMes(aluguel.mes_referencia)} · {formatarMoeda(aluguel.valor)}
+            </p>
+            <p className="text-xs text-slate-400">
               Vence {formatarDataCurta(aluguel.data_vencimento)}
-              {aluguel.inquilino?.nome && (
-                <> · <span className="font-medium">{aluguel.inquilino.nome}</span></>
-              )}
             </p>
           </div>
           <button
