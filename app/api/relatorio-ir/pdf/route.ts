@@ -29,29 +29,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ano inválido' }, { status: 400 })
   }
 
-  const anoStr = String(ano)
-  const { data: alugueis, error } = await supabase
-    .from('alugueis')
-    .select(`
-      mes_referencia,
-      valor,
-      valor_pago,
-      status,
-      imoveis!inner(user_id)
-    `)
-    .eq('imoveis.user_id', user.id)
-    .eq('status', 'pago')
-    .like('mes_referencia', `${anoStr}%`)
+  // Passo 1 — IDs dos imóveis do usuário
+  const { data: imoveis, error: errImoveis } = await supabase
+    .from('imoveis')
+    .select('id')
+    .eq('user_id', user.id)
 
-  if (error) {
+  if (errImoveis) {
     return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
   }
 
-  const registros = (alugueis ?? []).map(a => ({
-    mes_referencia: a.mes_referencia,
-    valor: a.valor,
-    valor_pago: a.valor_pago,
-  }))
+  const imovelIds = (imoveis ?? []).map(i => i.id)
+
+  // Passo 2 — aluguéis pagos no ano
+  const anoStr = String(ano)
+  const registros: { mes_referencia: string; valor: number; valor_pago: number | null }[] = []
+
+  if (imovelIds.length > 0) {
+    const { data: alugueis, error } = await supabase
+      .from('alugueis')
+      .select('mes_referencia, valor, valor_pago')
+      .in('imovel_id', imovelIds)
+      .eq('status', 'pago')
+      .like('mes_referencia', `${anoStr}%`)
+
+    if (error) {
+      return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
+    }
+
+    registros.push(...(alugueis ?? []).map(a => ({
+      mes_referencia: a.mes_referencia,
+      valor: a.valor,
+      valor_pago: a.valor_pago,
+    })))
+  }
 
   const resumo = calcularResumoAnual(ano, registros)
 

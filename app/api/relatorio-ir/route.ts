@@ -29,18 +29,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Ano inválido' }, { status: 400 })
   }
 
-  // Busca aluguéis pagos do usuário no ano
+  // Passo 1 — IDs dos imóveis do usuário
+  const { data: imoveis, error: errImoveis } = await supabase
+    .from('imoveis')
+    .select('id')
+    .eq('user_id', user.id)
+
+  if (errImoveis) {
+    console.error('[relatorio-ir] erro ao buscar imoveis:', errImoveis.message)
+    return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
+  }
+
+  const imovelIds = (imoveis ?? []).map(i => i.id)
+
+  if (imovelIds.length === 0) {
+    return NextResponse.json(calcularResumoAnual(ano, []))
+  }
+
+  // Passo 2 — aluguéis pagos no ano filtrados pelos imóveis do usuário
   const anoStr = String(ano)
   const { data: alugueis, error } = await supabase
     .from('alugueis')
-    .select(`
-      mes_referencia,
-      valor,
-      valor_pago,
-      status,
-      imoveis!inner(user_id)
-    `)
-    .eq('imoveis.user_id', user.id)
+    .select('mes_referencia, valor, valor_pago')
+    .in('imovel_id', imovelIds)
     .eq('status', 'pago')
     .like('mes_referencia', `${anoStr}%`)
 
