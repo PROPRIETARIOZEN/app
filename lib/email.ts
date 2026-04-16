@@ -335,10 +335,8 @@ interface CobrancaInquilinoParams {
   // Modo manual
   pixKey?: string | null
   pixKeyTipo?: string | null
-  pixQrBase64?: string | null   // base64 PNG gerado pelo servidor
   // Modo automático (Asaas)
   asaasPixCopiaECola?: string | null
-  asaasPixQrcode?: string | null // base64 PNG vindo do Asaas
   assasBoletoUrl?: string | null
 }
 
@@ -350,21 +348,24 @@ const PIX_TIPO_LABEL_EMAIL: Record<string, string> = {
   aleatoria: 'Chave aleatória',
 }
 
+// Gera URL de QR code via serviço externo (compatível com todos os clientes de e-mail)
+function qrCodeUrl(data: string): string {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(data)}`
+}
+
 export async function enviarCobrancaParaInquilino(p: CobrancaInquilinoParams) {
-  const isAutomatic = !!(p.asaasPixCopiaECola || p.asaasPixQrcode || p.assasBoletoUrl)
+  const isAutomatic = !!(p.asaasPixCopiaECola || p.assasBoletoUrl)
   const tipoLabel = p.pixKeyTipo ? (PIX_TIPO_LABEL_EMAIL[p.pixKeyTipo] ?? p.pixKeyTipo) : 'PIX'
 
   // ── bloco PIX manual ──
   let pixManualBlock = ''
   if (!isAutomatic && p.pixKey) {
-    const qrImg = p.pixQrBase64
-      ? `<div style="text-align:center;margin:16px 0;">
-           <img src="data:image/png;base64,${p.pixQrBase64}" alt="QR Code PIX"
+    const qrImg = `<div style="text-align:center;margin:16px 0;">
+           <img src="${qrCodeUrl(p.pixKey)}" alt="QR Code PIX"
                 width="180" height="180"
                 style="border-radius:8px;border:1px solid #e5e7eb;padding:8px;background:#fff;" />
            <p style="margin:6px 0 0;font-size:11px;color:#9ca3af;">Aponte a câmera do celular para pagar</p>
          </div>`
-      : ''
     pixManualBlock = `
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:20px 0;">
         <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.5px;">
@@ -380,9 +381,10 @@ export async function enviarCobrancaParaInquilino(p: CobrancaInquilinoParams) {
   // ── bloco Asaas (automático) ──
   let asaasBlock = ''
   if (isAutomatic) {
-    const qrImg = p.asaasPixQrcode
+    // Usa o copia-e-cola como dado do QR (é o payload PIX padrão)
+    const qrImg = p.asaasPixCopiaECola
       ? `<div style="text-align:center;margin:16px 0;">
-           <img src="data:image/png;base64,${p.asaasPixQrcode}" alt="QR Code PIX"
+           <img src="${qrCodeUrl(p.asaasPixCopiaECola)}" alt="QR Code PIX"
                 width="180" height="180"
                 style="border-radius:8px;border:1px solid #e5e7eb;padding:8px;background:#fff;" />
            <p style="margin:6px 0 0;font-size:11px;color:#9ca3af;">QR Code PIX — aponte a câmera para pagar</p>

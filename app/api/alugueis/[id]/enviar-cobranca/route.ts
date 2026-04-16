@@ -18,7 +18,7 @@ export async function POST(
       .from('alugueis')
       .select(`
         id, valor, data_vencimento, mes_referencia,
-        asaas_pix_qrcode, asaas_pix_copiaecola, asaas_boleto_url,
+        asaas_pix_copiaecola, asaas_boleto_url,
         imovel:imoveis!inner(apelido, user_id, billing_mode),
         inquilino:inquilinos(nome, email)
       `)
@@ -51,15 +51,6 @@ export async function POST(
     const pixKeyTipo = (user.user_metadata?.pix_key_tipo as string | null) ?? null
     const isAutomatic = imovel?.billing_mode === 'AUTOMATIC'
 
-    // Gera QR code para modo manual
-    let pixQrBase64: string | null = null
-    if (!isAutomatic && pixKey) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const QRCode = require('qrcode') as { toDataURL: (text: string, opts: object) => Promise<string> }
-      const dataUrl = await QRCode.toDataURL(pixKey, { width: 200, margin: 2 })
-      pixQrBase64 = dataUrl.split(',')[1] ?? null
-    }
-
     await enviarCobrancaParaInquilino({
       para: inquilino.email,
       nomeInquilino: inquilino.nome,
@@ -68,11 +59,9 @@ export async function POST(
       valor: aluguel.valor,
       mesReferencia: aluguel.mes_referencia,
       dataVencimento: aluguel.data_vencimento,
-      pixKey:     isAutomatic ? null : pixKey,
-      pixKeyTipo: isAutomatic ? null : pixKeyTipo,
-      pixQrBase64: isAutomatic ? null : pixQrBase64,
+      pixKey:            isAutomatic ? null : pixKey,
+      pixKeyTipo:        isAutomatic ? null : pixKeyTipo,
       asaasPixCopiaECola: isAutomatic ? (aluguel.asaas_pix_copiaecola ?? null) : null,
-      asaasPixQrcode:     isAutomatic ? (aluguel.asaas_pix_qrcode ?? null) : null,
       assasBoletoUrl:     isAutomatic ? (aluguel.asaas_boleto_url ?? null) : null,
     })
 
