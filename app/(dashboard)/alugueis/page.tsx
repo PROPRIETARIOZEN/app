@@ -5,7 +5,7 @@ import { gerarAlugueisMes, atualizarStatusAtrasados } from './actions'
 export default async function AlugueisPage({
   searchParams,
 }: {
-  searchParams: { mes?: string }
+  searchParams: { mes?: string; cobrar?: string }
 }) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -56,6 +56,7 @@ export default async function AlugueisPage({
       <AlugueisClient
         alugueis={(alugueis ?? []) as unknown as AluguelItem[]}
         mesSelecionado={mesParam}
+        cobrarId={searchParams.cobrar ?? null}
         profile={profile
           ? {
               nome: profile.nome ?? '',

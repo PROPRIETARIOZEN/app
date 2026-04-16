@@ -228,21 +228,25 @@ function CobrancaButton({
     // Estado A — sem charge gerada (CPF pode estar ausente)
     if (!temCharge) {
       const semCpf = !aluguel.inquilino?.cpf
+      if (semCpf) {
+        return (
+          <button
+            onClick={e => { e.stopPropagation(); onClick() }}
+            title="Cadastre o CPF do inquilino para gerar cobrança Asaas"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            Sem CPF
+          </button>
+        )
+      }
       return (
         <button
           onClick={e => { e.stopPropagation(); onClick() }}
-          title={semCpf ? 'Cadastre o CPF do inquilino para gerar cobrança Asaas' : undefined}
-          className={cn(
-            'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors',
-            semCpf
-              ? 'bg-red-50 border border-red-200 text-red-600 hover:bg-red-100'
-              : 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100',
-          )}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors"
         >
-          {semCpf
-            ? <AlertCircle className="h-2.5 w-2.5" />
-            : <QrCode className="h-2.5 w-2.5" />}
-          Gerar Pix/Boleto
+          <Zap className="h-3.5 w-3.5 shrink-0" />
+          Gerar PIX + Boleto
         </button>
       )
     }
@@ -302,10 +306,10 @@ function CobrancaButton({
   return (
     <button
       onClick={e => { e.stopPropagation(); onClick() }}
-      className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors"
     >
-      <QrCode className="h-2.5 w-2.5" />
-      Cobrar via Pix
+      <QrCode className="h-3.5 w-3.5 shrink-0" />
+      Cobrar via PIX
     </button>
   )
 }
@@ -316,10 +320,12 @@ export function AlugueisClient({
   alugueis,
   mesSelecionado,
   profile,
+  cobrarId,
 }: {
   alugueis: AluguelItem[]
   mesSelecionado: string
   profile: Profile
+  cobrarId?: string | null
 }) {
   const router = useRouter()
 
@@ -477,6 +483,14 @@ export function AlugueisClient({
     setCobrancaAluguel(aluguel)
     setCobrancaOpen(true)
   }
+
+  // Auto-abre o modal quando a URL contém ?cobrar=ID (ex: vindo do dashboard)
+  useEffect(() => {
+    if (!cobrarId) return
+    const aluguel = listaAlugueis.find(a => a.id === cobrarId)
+    if (aluguel) { setCobrancaAluguel(aluguel); setCobrancaOpen(true) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobrarId])
 
   async function handleGerarRecibo(aluguel: AluguelItem) {
     setLoadingRecibo(aluguel.id)

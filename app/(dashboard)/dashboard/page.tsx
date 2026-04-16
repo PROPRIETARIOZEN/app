@@ -96,6 +96,7 @@ type AluguelLista = {
   status: string
   data_vencimento: string
   data_pagamento: string | null
+  mes_referencia: string
   imovel: { apelido: string; user_id: string } | null
   inquilino: { nome: string } | null
 }
@@ -188,7 +189,7 @@ export default async function DashboardPage({
 
     // Lista detalhada do mês selecionado (exclui cancelados/estornados)
     supabase.from('alugueis')
-      .select('id, valor, status, data_vencimento, data_pagamento, imovel:imoveis!inner(apelido, user_id), inquilino:inquilinos(nome)')
+      .select('id, valor, status, data_vencimento, data_pagamento, mes_referencia, imovel:imoveis!inner(apelido, user_id), inquilino:inquilinos(nome)')
       .eq('mes_referencia', mesAtual)
       .eq('imovel.user_id', user.id)
       .neq('status', 'cancelado')
@@ -201,7 +202,7 @@ export default async function DashboardPage({
 
     // Próximos vencimentos (7 dias) — sempre baseado em hoje
     supabase.from('alugueis')
-      .select('id, valor, data_vencimento, status, imovel:imoveis!inner(apelido, user_id), inquilino:inquilinos(nome)')
+      .select('id, valor, data_vencimento, status, mes_referencia, imovel:imoveis!inner(apelido, user_id), inquilino:inquilinos(nome)')
       .eq('imovel.user_id', user.id)
       .in('status', ['pendente', 'atrasado'])
       .lte('data_vencimento', em7Dias.toISOString().split('T')[0])
@@ -431,7 +432,11 @@ export default async function DashboardPage({
 
                       {/* Coluna 5: ação rápida */}
                       <div className="shrink-0">
-                        <AluguelAcaoBtn aluguelId={aluguel.id} status={aluguel.status} />
+                        <AluguelAcaoBtn
+                          aluguelId={aluguel.id}
+                          status={aluguel.status}
+                          mesReferencia={aluguel.mes_referencia.slice(0, 7)}
+                        />
                       </div>
                     </div>
                   )
@@ -491,6 +496,12 @@ export default async function DashboardPage({
                             <p className="text-sm font-bold text-[#0F172A] w-18 text-right">
                               {formatarMoeda(aluguel.valor)}
                             </p>
+                            <Link
+                              href={`/alugueis?mes=${aluguel.mes_referencia.slice(0, 7)}&cobrar=${aluguel.id}`}
+                              className="inline-flex items-center gap-1 rounded-md bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white transition-colors"
+                            >
+                              Cobrar
+                            </Link>
                           </div>
                         </div>
                       )
