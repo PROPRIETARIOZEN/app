@@ -3,32 +3,119 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import {
-  Check, X, Zap, Building2, FileText,
-  TrendingUp, BarChart3, Mail, Shield, Loader2, Star,
+  Check, X, Zap, FileText, TrendingUp,
+  BarChart3, Mail, Shield, Loader2, Star, Building2,
 } from 'lucide-react'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import type { PlanoTipo } from '@/lib/stripe'
+
+// ─── Feature row ─────────────────────────────────────────────────────────────
 
 function Recurso({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
-    <li className="flex items-center gap-3 text-sm py-1">
+    <li className="flex items-start gap-2.5 text-sm py-0.5">
       {ok
-        ? <Check className="h-4 w-4 shrink-0 text-emerald-500" />
-        : <X className="h-4 w-4 shrink-0 text-[#94A3B8]" />}
-      <span className={ok ? 'text-[#0F172A]' : 'text-[#94A3B8]'}>{children}</span>
+        ? <Check className="h-4 w-4 shrink-0 text-emerald-500 mt-0.5" />
+        : <X className="h-4 w-4 shrink-0 text-[#CBD5E1] mt-0.5" />}
+      <span className={ok ? 'text-[#334155]' : 'text-[#94A3B8]'}>{children}</span>
     </li>
   )
 }
 
+// ─── Plan card ───────────────────────────────────────────────────────────────
+
+interface PlanCardProps {
+  nome: string
+  preco: string
+  descricao: string
+  recursos: { label: string; ok: boolean }[]
+  ativo: boolean
+  cor: 'slate' | 'emerald' | 'purple'
+  badge?: string
+  cta?: React.ReactNode
+}
+
+function PlanCard({ nome, preco, descricao, recursos, ativo, cor, badge, cta }: PlanCardProps) {
+  const borderClass = {
+    slate:   ativo ? 'border-2 border-[#CBD5E1] ring-2 ring-[#E2E8F0]' : 'border border-[#E2E8F0]',
+    emerald: ativo ? 'border-2 border-emerald-500 ring-2 ring-emerald-100' : 'border-2 border-emerald-500',
+    purple:  ativo ? 'border-2 border-purple-500 ring-2 ring-purple-100' : 'border-2 border-purple-500',
+  }[cor]
+
+  const headerClass = {
+    slate:   'text-[#475569]',
+    emerald: 'text-emerald-600',
+    purple:  'text-purple-600',
+  }[cor]
+
+  const priceClass = {
+    slate:   'text-[#0F172A]',
+    emerald: 'text-emerald-700',
+    purple:  'text-purple-700',
+  }[cor]
+
+  return (
+    <div className={cn(
+      'relative flex flex-col rounded-2xl bg-white p-6',
+      borderClass,
+    )}>
+      {/* Badge flutuante */}
+      {badge && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <span className={cn(
+            'text-[11px] font-bold px-3 py-1 rounded-full text-white whitespace-nowrap',
+            cor === 'emerald' ? 'bg-emerald-600' : 'bg-purple-600',
+          )}>
+            {badge}
+          </span>
+        </div>
+      )}
+
+      {/* Cabeçalho */}
+      <div className="mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className={cn('text-[11px] font-bold uppercase tracking-widest', headerClass)}>{nome}</p>
+          {ativo && (
+            <Badge className={cn(
+              'text-[10px] font-semibold px-2 py-0.5',
+              cor === 'emerald'
+                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+                : cor === 'purple'
+                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-100'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-100',
+            )}>
+              <Check className="h-2.5 w-2.5 mr-1" />Plano atual
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-baseline gap-0.5 mb-1">
+          <span className={cn('text-[38px] font-bold leading-none', priceClass)}>{preco}</span>
+          {preco !== 'R$ 0' && <span className="text-sm text-[#94A3B8] ml-1">/mês</span>}
+        </div>
+        <p className="text-xs text-[#64748B] mt-1">{descricao}</p>
+      </div>
+
+      {/* Recursos */}
+      <ul className="space-y-0.5 flex-1 mb-6">
+        {recursos.map(r => <Recurso key={r.label} ok={r.ok}>{r.label}</Recurso>)}
+      </ul>
+
+      {/* CTA */}
+      {cta}
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 interface Props { planoAtual: PlanoTipo }
 
 export function PlanosClient({ planoAtual }: Props) {
-  const [loadingMaster, setLoadingMaster]   = useState(false)
-  const [loadingElite,  setLoadingElite]    = useState(false)
-  const [loadingPortal, setLoadingPortal]   = useState(false)
+  const [loadingMaster, setLoadingMaster] = useState(false)
+  const [loadingElite,  setLoadingElite]  = useState(false)
+  const [loadingPortal, setLoadingPortal] = useState(false)
 
   async function handleAssinar(plano: 'pago' | 'elite') {
     const setLoading = plano === 'elite' ? setLoadingElite : setLoadingMaster
@@ -57,184 +144,158 @@ export function PlanosClient({ planoAtual }: Props) {
     finally { setLoadingPortal(false) }
   }
 
+  // ── CTAs por combinação de plano ──────────────────────────────────────────
+
+  const ctaGratis = planoAtual === 'gratis'
+    ? <Button variant="outline" className="w-full cursor-default" disabled>Plano atual</Button>
+    : null
+
+  const ctaMaster = planoAtual === 'gratis'
+    ? (
+      <Button
+        className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
+        onClick={() => handleAssinar('pago')}
+        disabled={loadingMaster}
+      >
+        {loadingMaster ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+        Assinar Master — R$ 49,90/mês
+      </Button>
+    ) : planoAtual === 'pago'
+      ? (
+        <Button
+          variant="outline"
+          className="w-full border-emerald-200 text-emerald-700 gap-2"
+          onClick={handlePortal}
+          disabled={loadingPortal}
+        >
+          {loadingPortal ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+          Gerenciar assinatura
+        </Button>
+      )
+      : (
+        // elite → Master é inferior
+        <Button variant="outline" className="w-full text-[#94A3B8]" disabled>Plano inferior</Button>
+      )
+
+  const ctaElite = planoAtual === 'elite'
+    ? (
+      <Button
+        className="w-full bg-purple-600 hover:bg-purple-700 gap-2"
+        onClick={handlePortal}
+        disabled={loadingPortal}
+      >
+        {loadingPortal ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+        Gerenciar assinatura
+      </Button>
+    ) : (
+      <Button
+        className="w-full bg-purple-600 hover:bg-purple-700 gap-2"
+        onClick={() => handleAssinar('elite')}
+        disabled={loadingElite}
+      >
+        {loadingElite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
+        {planoAtual === 'pago' ? 'Fazer upgrade para Elite' : 'Assinar Elite — R$ 99,90/mês'}
+      </Button>
+    )
+
   return (
-    <div className="space-y-10 max-w-5xl mx-auto">
-      {/* Cabeçalho */}
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight text-[#0F172A]">Escolha seu plano</h1>
-        <p className="text-[#475569]">Simples, transparente, sem surpresas.</p>
+    <div className="max-w-5xl mx-auto space-y-8">
+
+      {/* Cabeçalho da página — estilo dashboard */}
+      <div>
+        <h1 className="text-[28px] font-bold tracking-tight text-[#0F172A]">Planos</h1>
+        <p className="text-sm text-[#475569] mt-0.5">
+          Escolha o plano ideal para você. Cancele quando quiser.
+        </p>
       </div>
 
       {/* Cards */}
-      <div className="grid gap-6 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-3">
 
-        {/* Grátis */}
-        <Card className={`relative flex flex-col ${planoAtual === 'gratis' ? 'border-2 border-[#E2E8F0] ring-2 ring-[#E2E8F0]' : 'border border-[#E2E8F0]'}`}>
-          {planoAtual === 'gratis' && (
-            <div className="px-6 pt-5 pb-0">
-              <Badge className="bg-[#F1F5F9] text-[#475569] hover:bg-[#F1F5F9] font-medium">Plano atual</Badge>
-            </div>
+        <PlanCard
+          nome="Grátis"
+          preco="R$ 0"
+          descricao="Para sempre grátis"
+          ativo={planoAtual === 'gratis'}
+          cor="slate"
+          recursos={[
+            { label: '1 imóvel · 1 inquilino',          ok: true  },
+            { label: '100 MB de armazenamento',           ok: true  },
+            { label: 'Histórico de aluguéis',             ok: true  },
+            { label: 'Dashboard com resumo',              ok: true  },
+            { label: 'Recibos PDF',                       ok: false },
+            { label: 'Reajuste automático',               ok: false },
+            { label: 'Relatórios mensais',                ok: false },
+            { label: 'Alertas por e-mail',                ok: false },
+          ]}
+          cta={ctaGratis ?? (
+            <Button variant="outline" className="w-full text-[#94A3B8]" disabled>
+              Plano inferior
+            </Button>
           )}
-          <CardHeader className={`${planoAtual === 'gratis' ? 'pt-3' : 'pt-6'} pb-4`}>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">Grátis</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-[#0F172A]">R$ 0</span>
-                <span className="text-[#94A3B8] text-sm">/mês</span>
-              </div>
-              <p className="text-sm text-[#475569]">Para começar a organizar</p>
-            </div>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col gap-5">
-            <ul className="space-y-0.5">
-              <Recurso ok={true}><Building2 className="h-3.5 w-3.5 inline mr-1" />1 imóvel · 1 inquilino</Recurso>
-              <Recurso ok={true}>100 MB de armazenamento</Recurso>
-              <Recurso ok={true}>Histórico de aluguéis</Recurso>
-              <Recurso ok={true}>Dashboard com resumo</Recurso>
-              <Recurso ok={false}><FileText className="h-3.5 w-3.5 inline mr-1" />Recibos PDF</Recurso>
-              <Recurso ok={false}><TrendingUp className="h-3.5 w-3.5 inline mr-1" />Reajuste automático</Recurso>
-              <Recurso ok={false}><BarChart3 className="h-3.5 w-3.5 inline mr-1" />Relatórios mensais</Recurso>
-              <Recurso ok={false}><Mail className="h-3.5 w-3.5 inline mr-1" />Alertas automáticos</Recurso>
-            </ul>
-            <div className="mt-auto">
-              {planoAtual === 'gratis'
-                ? <Button variant="outline" className="w-full" disabled>Plano atual</Button>
-                : <Button variant="outline" className="w-full" onClick={handlePortal} disabled={loadingPortal}>
-                    {loadingPortal && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Gerenciar no Stripe
-                  </Button>
-              }
-            </div>
-          </CardContent>
-        </Card>
+        />
 
-        {/* Master */}
-        <Card className={`relative flex flex-col border-2 border-emerald-500 ${planoAtual === 'pago' ? 'ring-2 ring-emerald-200' : ''}`}>
-          <div className="px-6 pt-5 pb-0">
-            {planoAtual === 'pago'
-              ? <Badge className="bg-[#D1FAE5] text-[#065F46] hover:bg-[#D1FAE5] font-semibold"><Check className="h-3 w-3 mr-1" />Ativo</Badge>
-              : <Badge className="bg-emerald-600 hover:bg-emerald-600 font-semibold"><Zap className="h-3 w-3 mr-1" />Mais popular</Badge>
-            }
-          </div>
-          <CardHeader className="pt-3 pb-4">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Master</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-emerald-700">R$ 49,90</span>
-                <span className="text-[#94A3B8] text-sm">/mês</span>
-              </div>
-              <p className="text-sm text-[#475569]">Gestão completa de imóveis</p>
-            </div>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col gap-5">
-            <ul className="space-y-0.5">
-              <Recurso ok={true}><Building2 className="h-3.5 w-3.5 inline mr-1" />3 imóveis · 3 inquilinos</Recurso>
-              <Recurso ok={true}>500 MB de armazenamento</Recurso>
-              <Recurso ok={true}>Histórico de aluguéis</Recurso>
-              <Recurso ok={true}>Dashboard com resumo</Recurso>
-              <Recurso ok={true}><FileText className="h-3.5 w-3.5 inline mr-1" />Recibos PDF</Recurso>
-              <Recurso ok={true}><TrendingUp className="h-3.5 w-3.5 inline mr-1" />Reajuste automático (IGPM/IPCA)</Recurso>
-              <Recurso ok={true}><BarChart3 className="h-3.5 w-3.5 inline mr-1" />Relatórios mensais</Recurso>
-              <Recurso ok={true}><Mail className="h-3.5 w-3.5 inline mr-1" />Alertas por e-mail</Recurso>
-            </ul>
-            <div className="mt-auto">
-              {planoAtual === 'pago'
-                ? <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handlePortal} disabled={loadingPortal}>
-                    {loadingPortal && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Gerenciar assinatura
-                  </Button>
-                : planoAtual === 'elite'
-                  ? <Button variant="outline" className="w-full" disabled>Plano inferior</Button>
-                  : <Button className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2" onClick={() => handleAssinar('pago')} disabled={loadingMaster}>
-                      {loadingMaster ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                      Assinar Master — R$ 49,90/mês
-                    </Button>
-              }
-            </div>
-          </CardContent>
-        </Card>
+        <PlanCard
+          nome="Master"
+          preco="R$ 49,90"
+          descricao="Menos de R$ 2 por dia"
+          ativo={planoAtual === 'pago'}
+          cor="emerald"
+          badge={planoAtual === 'gratis' ? 'Mais popular' : undefined}
+          recursos={[
+            { label: '3 imóveis · 3 inquilinos',          ok: true  },
+            { label: '500 MB de armazenamento',            ok: true  },
+            { label: 'Histórico de aluguéis',              ok: true  },
+            { label: 'Dashboard com resumo',               ok: true  },
+            { label: 'Recibos PDF',                        ok: true  },
+            { label: 'Reajuste automático (IGPM/IPCA)',    ok: true  },
+            { label: 'Relatórios mensais',                 ok: true  },
+            { label: 'Alertas por e-mail',                 ok: true  },
+          ]}
+          cta={ctaMaster}
+        />
 
-        {/* Elite */}
-        <Card className={`relative flex flex-col border-2 border-purple-500 ${planoAtual === 'elite' ? 'ring-2 ring-purple-200' : ''}`}>
-          <div className="px-6 pt-5 pb-0">
-            {planoAtual === 'elite'
-              ? <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 font-semibold"><Check className="h-3 w-3 mr-1" />Ativo</Badge>
-              : <Badge className="bg-purple-600 hover:bg-purple-600 font-semibold"><Star className="h-3 w-3 mr-1" />Premium</Badge>
-            }
-          </div>
-          <CardHeader className="pt-3 pb-4">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider">Elite</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-purple-700">R$ 99,90</span>
-                <span className="text-[#94A3B8] text-sm">/mês</span>
-              </div>
-              <p className="text-sm text-[#475569]">Para quem gerencia em escala</p>
-            </div>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col gap-5">
-            <ul className="space-y-0.5">
-              <Recurso ok={true}><Building2 className="h-3.5 w-3.5 inline mr-1" />10 imóveis · ilimitado inquilinos</Recurso>
-              <Recurso ok={true}>5 GB de armazenamento</Recurso>
-              <Recurso ok={true}>Histórico de aluguéis</Recurso>
-              <Recurso ok={true}>Dashboard com resumo</Recurso>
-              <Recurso ok={true}><FileText className="h-3.5 w-3.5 inline mr-1" />Recibos PDF</Recurso>
-              <Recurso ok={true}><TrendingUp className="h-3.5 w-3.5 inline mr-1" />Reajuste automático (IGPM/IPCA)</Recurso>
-              <Recurso ok={true}><BarChart3 className="h-3.5 w-3.5 inline mr-1" />Relatórios mensais</Recurso>
-              <Recurso ok={true}><Mail className="h-3.5 w-3.5 inline mr-1" />Alertas + cobrança automática</Recurso>
-              <Recurso ok={true}><Shield className="h-3.5 w-3.5 inline mr-1" />Suporte prioritário</Recurso>
-            </ul>
-            <div className="mt-auto">
-              {planoAtual === 'elite'
-                ? <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={handlePortal} disabled={loadingPortal}>
-                    {loadingPortal && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Gerenciar assinatura
-                  </Button>
-                : <Button className="w-full bg-purple-600 hover:bg-purple-700 gap-2" onClick={() => handleAssinar('elite')} disabled={loadingElite}>
-                    {loadingElite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
-                    {planoAtual === 'pago'
-                      ? 'Fazer upgrade para Elite'
-                      : 'Assinar Elite — R$ 99,90/mês'}
-                  </Button>
-              }
-            </div>
-          </CardContent>
-        </Card>
+        <PlanCard
+          nome="Elite"
+          preco="R$ 99,90"
+          descricao="Para gestão em escala"
+          ativo={planoAtual === 'elite'}
+          cor="purple"
+          badge={planoAtual === 'pago' ? 'Recomendado' : undefined}
+          recursos={[
+            { label: '10 imóveis · ilimitado inquilinos',  ok: true  },
+            { label: '5 GB de armazenamento',              ok: true  },
+            { label: 'Histórico de aluguéis',              ok: true  },
+            { label: 'Dashboard com resumo',               ok: true  },
+            { label: 'Recibos PDF',                        ok: true  },
+            { label: 'Reajuste automático (IGPM/IPCA)',    ok: true  },
+            { label: 'Relatórios mensais',                 ok: true  },
+            { label: 'Alertas + cobrança automática',      ok: true  },
+            { label: 'Suporte prioritário',                ok: true  },
+          ]}
+          cta={ctaElite}
+        />
       </div>
 
       {/* Garantias */}
-      <div>
-        <Separator className="mb-8" />
-        <div className="grid gap-6 sm:grid-cols-3 text-center">
-          <div className="space-y-2">
-            <div className="flex justify-center">
-              <div className="p-3 rounded-full bg-[#F1F5F9]">
-                <Shield className="h-6 w-6 text-[#475569]" />
-              </div>
+      <div className="grid sm:grid-cols-3 gap-4 pt-2">
+        {[
+          { icon: Shield,   title: 'Cancele quando quiser',  sub: 'Sem fidelidade ou multa.' },
+          { icon: Check,    title: 'Pagamento seguro SSL',   sub: 'Processado pela Stripe.' },
+          { icon: Zap,      title: 'Ativação imediata',      sub: 'Acesso liberado na hora.' },
+        ].map(({ icon: Icon, title, sub }) => (
+          <div key={title} className="flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3">
+            <div className="h-8 w-8 rounded-lg bg-[#F8FAFC] flex items-center justify-center shrink-0">
+              <Icon className="h-4 w-4 text-[#475569]" />
             </div>
-            <p className="text-sm font-semibold text-[#0F172A]">Cancele quando quiser</p>
-            <p className="text-xs text-[#94A3B8]">Sem fidelidade. Cancele a qualquer momento.</p>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-center">
-              <div className="p-3 rounded-full bg-[#F1F5F9]">
-                <Check className="h-6 w-6 text-[#475569]" />
-              </div>
+            <div>
+              <p className="text-sm font-medium text-[#0F172A]">{title}</p>
+              <p className="text-xs text-[#94A3B8]">{sub}</p>
             </div>
-            <p className="text-sm font-semibold text-[#0F172A]">Pagamento seguro SSL</p>
-            <p className="text-xs text-[#94A3B8]">Processado pela Stripe com criptografia.</p>
           </div>
-          <div className="space-y-2">
-            <div className="flex justify-center">
-              <div className="p-3 rounded-full bg-[#F1F5F9]">
-                <Zap className="h-6 w-6 text-[#475569]" />
-              </div>
-            </div>
-            <p className="text-sm font-semibold text-[#0F172A]">Ativação imediata</p>
-            <p className="text-xs text-[#94A3B8]">Acesso liberado ao confirmar o pagamento.</p>
-          </div>
-        </div>
+        ))}
       </div>
+
     </div>
   )
 }

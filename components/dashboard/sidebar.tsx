@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Building2, Users, Receipt,
-  Settings, LogOut, Star, ChevronRight, Shield,
+  Settings, LogOut, Star, ChevronRight, Shield, Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -89,19 +89,19 @@ export function Sidebar({ profile, onClose }: SidebarProps) {
           <div className="rounded-xl border border-sidebar-primary/20 bg-sidebar-accent/50 p-3 space-y-2.5">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-lg bg-sidebar-primary/20 flex items-center justify-center">
-                <Star className="h-3.5 w-3.5 text-sidebar-primary" />
+                <Zap className="h-3.5 w-3.5 text-sidebar-primary" />
               </div>
               <span className="text-xs font-semibold text-[#E2E8F0]">Plano Grátis</span>
             </div>
             <p className="text-[11px] text-sidebar-foreground leading-relaxed">
-              Desbloqueie até 3 imóveis, recibos PDF e alertas automáticos.
+              Faça upgrade e desbloqueie mais imóveis, recibos PDF e alertas automáticos.
             </p>
             <Link
               href="/planos"
               onClick={onClose}
               className="flex items-center justify-between w-full rounded-lg bg-sidebar-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#047857] transition-colors"
             >
-              Fazer upgrade Master
+              Upgrade para Master
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -119,14 +119,14 @@ export function Sidebar({ profile, onClose }: SidebarProps) {
               <span className="text-xs font-semibold text-[#E2E8F0]">Plano Master</span>
             </div>
             <p className="text-[11px] text-sidebar-foreground leading-relaxed">
-              Elite: 10 imóveis, inquilinos ilimitados e cobrança automática.
+              Faça upgrade e desbloqueie 10 imóveis, inquilinos ilimitados e cobrança automática.
             </p>
             <Link
               href="/planos"
               onClick={onClose}
               className="flex items-center justify-between w-full rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition-colors"
             >
-              Fazer upgrade Elite
+              Upgrade para Elite
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
