@@ -63,7 +63,9 @@ export function ImovelModal({ open, onOpenChange, imovel, plano }: ImovelModalPr
   const [loading, setLoading] = useState(false)
   const editando = !!imovel
 
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormData>({
+  const hoje = new Date().toISOString().split('T')[0]
+
+  const { register, handleSubmit, watch, reset, setError, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { indice_reajuste: 'fixo', tipo: 'apartamento', dia_vencimento: '10' },
   })
@@ -105,6 +107,10 @@ export function ImovelModal({ open, onOpenChange, imovel, plano }: ImovelModalPr
   }, [open, imovel, reset])
 
   async function onSubmit(data: FormData) {
+    if (!editando && data.data_inicio_contrato && data.data_inicio_contrato < hoje) {
+      setError('data_inicio_contrato', { message: 'A data de início não pode ser no passado' })
+      return
+    }
     setLoading(true)
     try {
       const input = {
@@ -206,7 +212,15 @@ export function ImovelModal({ open, onOpenChange, imovel, plano }: ImovelModalPr
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="data_inicio_contrato">Início do contrato</Label>
-              <Input id="data_inicio_contrato" type="date" {...register('data_inicio_contrato')} />
+              <Input
+                id="data_inicio_contrato"
+                type="date"
+                min={!editando ? hoje : undefined}
+                {...register('data_inicio_contrato')}
+              />
+              {errors.data_inicio_contrato && (
+                <p className="text-destructive text-xs">{errors.data_inicio_contrato.message}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="data_proximo_reajuste">Próximo reajuste</Label>
