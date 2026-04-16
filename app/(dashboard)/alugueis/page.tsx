@@ -1,11 +1,12 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { AlugueisClient, type AluguelItem } from '@/components/alugueis/alugueis-client'
+import type { AnoResumoItem } from '@/components/alugueis/calendario-anual'
 import { gerarAlugueisMes, atualizarStatusAtrasados } from './actions'
 
 export default async function AlugueisPage({
   searchParams,
 }: {
-  searchParams: { mes?: string; cobrar?: string }
+  searchParams: { mes?: string; cobrar?: string; view?: string; ano?: string }
 }) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -15,16 +16,17 @@ export default async function AlugueisPage({
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
   const mesParam = searchParams.mes ?? mesAtual
   const mesReferencia = `${mesParam}-01`
+  const viewParam = searchParams.view ?? 'lista'
+  const anoParam = searchParams.ano ?? mesParam.slice(0, 4)
+  const anoNum = parseInt(anoParam)
 
   // Gera registros faltantes + atualiza atrasados em paralelo
-  // Meses futuros também são gerados quando o usuário navega até eles;
-  // gerarAlugueisMes já respeita data_inicio_contrato de cada imóvel.
   await Promise.all([
     gerarAlugueisMes(mesReferencia),
     atualizarStatusAtrasados(),
   ])
 
-  const [{ data: alugueis }, { data: profile }] = await Promise.all([
+  const [{ data: alugueis }, { data: profile }, { data: alugueiAno }] = await Promise.all([
     supabase
       .from('alugueis')
       .select(`
@@ -46,6 +48,16 @@ export default async function AlugueisPage({
       .select('nome, email, telefone, plano')
       .eq('id', user.id)
       .single(),
+
+    // Dados anuais para o calendário (todos os meses do ano selecionado)
+    supabase
+      .from('alugueis')
+      .select('valor, status, mes_referencia, imovel:imoveis!inner(user_id)')
+      .eq('imovel.user_id', user.id)
+      .gte('mes_referencia', `${anoNum}-01-01`)
+      .lte('mes_referencia', `${anoNum}-12-31`)
+      .neq('status', 'cancelado')
+      .neq('status', 'estornado'),
   ])
 
   const pix_key = (user.user_metadata?.pix_key as string | null) ?? null
@@ -57,6 +69,9 @@ export default async function AlugueisPage({
         alugueis={(alugueis ?? []) as unknown as AluguelItem[]}
         mesSelecionado={mesParam}
         cobrarId={searchParams.cobrar ?? null}
+        view={viewParam}
+        anoSelecionado={anoParam}
+        anoData={(alugueiAno ?? []) as unknown as AnoResumoItem[]}
         profile={profile
           ? {
               nome: profile.nome ?? '',

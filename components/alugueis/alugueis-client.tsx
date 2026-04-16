@@ -8,6 +8,7 @@ import {
   Calendar, Filter, MoreHorizontal, X, CheckCheck,
   AlertCircle, TrendingUp, Zap, Loader2, Paperclip,
   Mail, Tag, SplitSquareHorizontal, Ban, Gift, QrCode, Info,
+  LayoutList, CalendarDays,
 } from 'lucide-react'
 import { DocumentosAluguel } from '@/components/documentos/DocumentosAluguel'
 import { toast } from 'sonner'
@@ -24,6 +25,7 @@ import { DescontoModal } from './desconto-modal'
 import { IsentarModal } from './isentar-modal'
 import { ReenviarReciboModal } from './reenviar-recibo-modal'
 import { marcarReciboGerado } from '@/app/(dashboard)/alugueis/actions'
+import { CalendarioAnual, type AnoResumoItem } from './calendario-anual'
 import { formatarMoeda, formatarData } from '@/lib/helpers'
 import { cn } from '@/lib/utils'
 import {
@@ -243,7 +245,7 @@ function CobrancaButton({
       return (
         <button
           onClick={e => { e.stopPropagation(); onClick() }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors whitespace-nowrap"
         >
           <Zap className="h-3.5 w-3.5 shrink-0" />
           Gerar PIX + Boleto
@@ -306,7 +308,7 @@ function CobrancaButton({
   return (
     <button
       onClick={e => { e.stopPropagation(); onClick() }}
-      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors"
+      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors whitespace-nowrap"
     >
       <QrCode className="h-3.5 w-3.5 shrink-0" />
       Cobrar via PIX
@@ -321,11 +323,17 @@ export function AlugueisClient({
   mesSelecionado,
   profile,
   cobrarId,
+  view = 'lista',
+  anoSelecionado,
+  anoData = [],
 }: {
   alugueis: AluguelItem[]
   mesSelecionado: string
   profile: Profile
   cobrarId?: string | null
+  view?: string
+  anoSelecionado?: string
+  anoData?: AnoResumoItem[]
 }) {
   const router = useRouter()
 
@@ -645,11 +653,11 @@ export function AlugueisClient({
           </p>
         </div>
 
-        {/* Right controls: cobrar todos + month nav + filter */}
+        {/* Right controls: cobrar todos + month nav + filter + view toggle */}
         <div className="flex items-center gap-2 flex-wrap">
 
-          {/* Cobrar todos — aparece quando há pendentes sem cobrança */}
-          {semCobranca.length > 0 && (
+          {/* Cobrar todos + month nav + filter — only in list view */}
+          {view !== 'calendario' && semCobranca.length > 0 && (
             <div className="flex items-center gap-1.5">
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 px-2.5 py-0.5 text-xs font-semibold">
                 <AlertCircle className="h-3 w-3" />
@@ -667,8 +675,8 @@ export function AlugueisClient({
             </div>
           )}
 
-          {/* Month navigation */}
-          <div className="flex items-center gap-1">
+          {/* Month navigation — list view only */}
+          {view !== 'calendario' && <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"
@@ -688,10 +696,10 @@ export function AlugueisClient({
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
-          </div>
+          </div>}
 
-          {/* Imóvel filter — só aparece quando há mais de 1 imóvel */}
-          {imoveisUnicos.length > 1 && (
+          {/* Imóvel filter — list view only, mais de 1 imóvel */}
+          {view !== 'calendario' && imoveisUnicos.length > 1 && (
             <div className="relative" ref={filterRef}>
               <Button
                 variant="outline"
@@ -729,10 +737,37 @@ export function AlugueisClient({
               )}
             </div>
           )}
+
+          {/* View toggle — lista / calendário anual */}
+          <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 gap-0.5">
+            <button
+              onClick={() => router.push(`/alugueis?mes=${mesSelecionado}`)}
+              title="Lista"
+              className={cn('rounded-md p-1.5 transition-colors', view !== 'calendario' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600')}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => router.push(`/alugueis?view=calendario&ano=${anoSelecionado ?? mesSelecionado.slice(0, 4)}`)}
+              title="Visão anual"
+              className={cn('rounded-md p-1.5 transition-colors', view === 'calendario' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600')}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Tabs de status */}
+      {/* Tabs de status — list view only */}
+      {view === 'calendario' && (
+        <CalendarioAnual
+          data={anoData}
+          ano={parseInt(anoSelecionado ?? mesSelecionado.slice(0, 4))}
+        />
+      )}
+
+      {/* Tabs, stat cards, banner e tabela — apenas no modo lista */}
+      {view !== 'calendario' && <>
       <div className="flex items-center gap-1 overflow-x-auto">
         {TABS.map(tab => (
           <button
@@ -854,7 +889,7 @@ export function AlugueisClient({
       ) : (
         <Card className="overflow-hidden">
           {/* Table header */}
-          <div className="hidden md:grid grid-cols-[36px_2fr_1.5fr_100px_80px_110px_90px_72px] gap-3 px-5 items-center bg-slate-50 border-b border-slate-100 h-10">
+          <div className="hidden md:grid grid-cols-[36px_2fr_1.5fr_100px_80px_130px_90px_72px] gap-3 px-5 items-center bg-slate-50 border-b border-slate-100 h-10">
             <div className="flex items-center justify-center">
               <input
                 type="checkbox"
@@ -899,7 +934,7 @@ export function AlugueisClient({
                   <div key={aluguel.id}>
                   <div
                     className={cn(
-                      'group flex flex-col md:grid md:grid-cols-[36px_2fr_1.5fr_100px_80px_110px_90px_72px] md:gap-3 px-5 py-4 md:py-0 md:h-16 md:items-center hover:bg-slate-50 transition-colors',
+                      'group flex flex-col md:grid md:grid-cols-[36px_2fr_1.5fr_100px_80px_130px_90px_72px] md:gap-3 px-5 py-4 md:py-0 md:h-16 md:items-center hover:bg-slate-50 transition-colors',
                       isPago && 'opacity-[0.92]',
                       isSelected && 'bg-emerald-50/60 hover:bg-emerald-50/80',
                       isDocOpen && 'bg-slate-50',
@@ -1210,6 +1245,8 @@ export function AlugueisClient({
           )}
         </Card>
       )}
+
+      </>}
 
       {/* ── Modais de ação ── */}
       <PagarModal open={modalOpen} onOpenChange={setModalOpen} aluguel={pagando} />
