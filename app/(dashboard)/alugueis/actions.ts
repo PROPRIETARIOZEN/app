@@ -17,6 +17,12 @@ function calcularVencimento(mesReferencia: string, diaVencimento: number): strin
 export async function gerarAlugueisMes(
   mesReferencia: string,
 ): Promise<{ criados: number; error?: string }> {
+  // NUNCA gerar registro para mês futuro.
+  // mesReferencia é YYYY-MM-01; mesAtualRef é calculado sem depender de fuso.
+  const _hoje = new Date()
+  const mesAtualRef = `${_hoje.getFullYear()}-${String(_hoje.getMonth() + 1).padStart(2, '0')}-01`
+  if (mesReferencia > mesAtualRef) return { criados: 0 }
+
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { criados: 0, error: 'Não autorizado' }
@@ -183,6 +189,53 @@ export async function atualizarStatusAtrasados(): Promise<void> {
 
   revalidatePath('/alugueis')
   revalidatePath('/dashboard')
+}
+
+// Remove registros pendentes criados indevidamente para meses futuros.
+// Deve ser chamada apenas uma vez por sessão (cliente controla via localStorage).
+// Loga o SQL equivalente para auditoria manual no Supabase se necessário.
+export async function limparRegistrosFuturosIndevidos(): Promise<{ removidos: number; error?: string }> {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { removidos: 0, error: 'Não autorizado' }
+
+  const hoje = new Date()
+  const mesAtualRef = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`
+
+  // SQL equivalente para auditoria manual no Supabase SQL Editor:
+  // SELECT id, mes_referencia, status FROM alugueis
+  //   JOIN imoveis ON alugueis.imovel_id = imoveis.id
+  //   WHERE imoveis.user_id = '<user_id>'
+  //     AND alugueis.mes_referencia > '<mes_atual_ref>'
+  //     AND alugueis.status = 'pendente'
+  //   ORDER BY mes_referencia;
+  //
+  // Para deletar:
+  // DELETE FROM alugueis
+  //   USING imoveis
+  //   WHERE alugueis.imovel_id = imoveis.id
+  //     AND imoveis.user_id = '<user_id>'
+  //     AND alugueis.mes_referencia > '<mes_atual_ref>'
+  //     AND alugueis.status = 'pendente';
+
+  const { data: futuros } = await supabase
+    .from('alugueis')
+    .select('id, mes_referencia, imovel:imoveis!inner(user_id)')
+    .eq('imovel.user_id', user.id)
+    .eq('status', 'pendente')
+    .gt('mes_referencia', mesAtualRef)
+
+  if (!futuros?.length) return { removidos: 0 }
+
+  const ids = futuros.map(a => a.id)
+  console.info(`[limpeza] Removendo ${ids.length} registro(s) futuro(s) indevido(s):`,
+    futuros.map(a => a.mes_referencia).join(', '))
+
+  const { error } = await supabase.from('alugueis').delete().in('id', ids)
+  if (error) return { removidos: 0, error: error.message }
+
+  revalidatePath('/alugueis')
+  return { removidos: ids.length }
 }
 
 // Registra pagamento

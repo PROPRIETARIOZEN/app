@@ -24,7 +24,7 @@ import { CancelarCobrancaModal } from './cancelar-cobranca-modal'
 import { DescontoModal } from './desconto-modal'
 import { IsentarModal } from './isentar-modal'
 import { ReenviarReciboModal } from './reenviar-recibo-modal'
-import { marcarReciboGerado } from '@/app/(dashboard)/alugueis/actions'
+import { marcarReciboGerado, limparRegistrosFuturosIndevidos } from '@/app/(dashboard)/alugueis/actions'
 import { CalendarioAnual, type AnoResumoItem, type ImovelVigencia } from './calendario-anual'
 import { formatarMoeda, formatarData } from '@/lib/helpers'
 import { cn } from '@/lib/utils'
@@ -342,6 +342,20 @@ export function AlugueisClient({
   // Local copy of alugueis — updated optimistically without router.refresh()
   const [listaAlugueis, setListaAlugueis] = useState(alugueis)
   useEffect(() => { setListaAlugueis(alugueis) }, [alugueis])
+
+  // Limpeza one-time: remove registros pendentes gerados indevidamente para meses futuros.
+  // Executa apenas uma vez por dispositivo (flag no localStorage).
+  useEffect(() => {
+    const FLAG = 'limpeza_futuros_executada'
+    if (typeof window === 'undefined' || localStorage.getItem(FLAG)) return
+    limparRegistrosFuturosIndevidos().then(res => {
+      localStorage.setItem(FLAG, '1')
+      if (res.removidos > 0) {
+        console.info(`[limpeza] ${res.removidos} registro(s) futuro(s) indevido(s) removido(s).`)
+      }
+    }).catch(() => { /* silencioso — não afeta UX */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function atualizarAluguel(id: string, updates: Partial<AluguelItem>) {
     setListaAlugueis(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a))
