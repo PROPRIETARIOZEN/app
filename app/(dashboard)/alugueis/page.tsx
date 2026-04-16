@@ -46,12 +46,18 @@ export default async function AlugueisPage({
       .single(),
   ])
 
+  const pix_key = (user.user_metadata?.pix_key as string | null) ?? null
+  const pix_key_tipo = (user.user_metadata?.pix_key_tipo as string | null) ?? null
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <AlugueisClient
         alugueis={(alugueis ?? []) as AluguelItem[]}
         mesSelecionado={mesParam}
-        profile={profile ?? { nome: '', email: user.email ?? '', telefone: null }}
+        profile={profile
+          ? { ...profile, pix_key, pix_key_tipo }
+          : { nome: '', email: user.email ?? '', telefone: null, pix_key, pix_key_tipo }
+        }
       />
     </div>
   )

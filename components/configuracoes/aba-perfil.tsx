@@ -19,11 +19,21 @@ import { Separator } from '@/components/ui/separator'
 import { atualizarPerfil, obterUrlUploadAvatar, salvarFotoPerfilUrl } from '@/app/(dashboard)/configuracoes/actions'
 import { formatarData } from '@/lib/helpers'
 
+const PIX_TIPOS = [
+  { value: 'cpf',       label: 'CPF' },
+  { value: 'cnpj',      label: 'CNPJ' },
+  { value: 'email',     label: 'E-mail' },
+  { value: 'telefone',  label: 'Telefone' },
+  { value: 'aleatoria', label: 'Chave aleatória' },
+] as const
+
 const schema = z.object({
   nome: z.string().min(2, 'Mínimo 2 caracteres'),
   telefone: z.string().optional(),
   cpf: z.string().optional(),
   nome_recibo: z.string().optional(),
+  pix_key_tipo: z.string().optional(),
+  pix_key: z.string().optional(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -49,6 +59,8 @@ interface Props {
     telefone: string | null
     plano: 'gratis' | 'pago' | 'elite'
     criado_em: string
+    pix_key?: string | null
+    pix_key_tipo?: string | null
   }
   avatarUrl: string | null
   qtdImoveis: number
@@ -68,6 +80,8 @@ export function AbaPerfil({ profile, avatarUrl, qtdImoveis }: Props) {
       telefone: profile.telefone ?? '',
       cpf: '',
       nome_recibo: profile.nome,
+      pix_key_tipo: profile.pix_key_tipo ?? '',
+      pix_key: profile.pix_key ?? '',
     },
   })
 
@@ -87,6 +101,8 @@ export function AbaPerfil({ profile, avatarUrl, qtdImoveis }: Props) {
         telefone: data.telefone ? data.telefone.replace(/\D/g, '') : null,
         cpf: data.cpf ? data.cpf.replace(/\D/g, '') : null,
         nome_recibo: data.nome_recibo || null,
+        pix_key: data.pix_key || null,
+        pix_key_tipo: data.pix_key || null ? (data.pix_key_tipo || null) : null,
       })
       if (result.error) toast.error(result.error)
       else { toast.success('Perfil atualizado!'); router.refresh() }
@@ -231,6 +247,47 @@ export function AbaPerfil({ profile, avatarUrl, qtdImoveis }: Props) {
                 Pode ser diferente do nome de login. Usado nos recibos de aluguel.
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Chave PIX */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Chave PIX para recebimento</CardTitle>
+            <CardDescription>
+              Informe sua chave PIX para que os inquilinos possam transferir diretamente para você.
+              Disponível para todos os planos.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="pix_key_tipo">Tipo de chave</Label>
+                <select
+                  id="pix_key_tipo"
+                  className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus:border-ring"
+                  {...register('pix_key_tipo')}
+                >
+                  <option value="">Selecione o tipo</option>
+                  {PIX_TIPOS.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pix_key">Chave PIX</Label>
+                <Input
+                  id="pix_key"
+                  placeholder="Informe sua chave PIX"
+                  {...register('pix_key')}
+                />
+              </div>
+            </div>
+            {watch('pix_key') && (
+              <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                Sua chave PIX será exibida nas instruções de pagamento enviadas aos inquilinos.
+              </p>
+            )}
           </CardContent>
         </Card>
 

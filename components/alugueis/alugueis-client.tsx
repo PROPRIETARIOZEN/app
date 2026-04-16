@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { PagarModal } from './pagar-modal'
+import { CobrancaModal } from './cobranca-modal'
 import { marcarReciboGerado } from '@/app/(dashboard)/alugueis/actions'
 import { formatarMoeda } from '@/lib/helpers'
 import { cn } from '@/lib/utils'
@@ -43,7 +44,13 @@ export type AluguelItem = {
   metodo_pagamento: string | null
 }
 
-type Profile = { nome: string; email: string; telefone: string | null }
+type Profile = {
+  nome: string
+  email: string
+  telefone: string | null
+  pix_key?: string | null
+  pix_key_tipo?: string | null
+}
 
 const STATUS_CONFIG = {
   pago:      { label: 'Pago',      icon: CheckCircle2,  badgeCls: 'bg-[#D1FAE5] text-[#065F46] hover:bg-[#D1FAE5]' },
@@ -158,108 +165,85 @@ function VencimentoCell({ aluguel }: { aluguel: AluguelItem }) {
   )
 }
 
-// Cobrança column — shows Asaas state when available, else placeholder
-function CobrancaCell({ aluguel }: { aluguel: AluguelItem }) {
-  const [pixOpen, setPixOpen] = useState(false)
-
-  // Sem cobrança Asaas
-  if (!aluguel.asaas_charge_id) {
-    return <span className="text-slate-300 text-sm">—</span>
+// Cobrança column — button that opens CobrancaModal
+function CobrancaButton({
+  aluguel,
+  pixKey,
+  onClick,
+}: {
+  aluguel: AluguelItem
+  pixKey: string | null
+  onClick: () => void
+}) {
+  // Pago: mostra método
+  if (aluguel.status === 'pago') {
+    if (aluguel.metodo_pagamento) {
+      const label = aluguel.metodo_pagamento === 'PIX' ? 'PIX'
+        : aluguel.metodo_pagamento === 'BOLETO' ? 'Boleto'
+        : aluguel.metodo_pagamento
+      return (
+        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[11px] font-semibold gap-1">
+          <CheckCircle2 className="h-2.5 w-2.5" />
+          {label}
+        </Badge>
+      )
+    }
+    return <span className="text-slate-300 text-xs">—</span>
   }
 
-  // Pago via Asaas: exibe método
-  if (aluguel.status === 'pago' && aluguel.metodo_pagamento) {
-    const label = aluguel.metodo_pagamento === 'PIX' ? 'PIX'
-      : aluguel.metodo_pagamento === 'BOLETO' ? 'Boleto'
-      : aluguel.metodo_pagamento
+  // Cancelado / estornado
+  if (aluguel.status === 'cancelado' || aluguel.status === 'estornado') {
+    return <span className="text-slate-300 text-xs">—</span>
+  }
+
+  const isAutomatic = aluguel.imovel?.billing_mode === 'AUTOMATIC'
+  const temCharge = !!aluguel.asaas_charge_id
+
+  // AUTOMATIC sem charge: destaque âmbar
+  if (isAutomatic && !temCharge) {
     return (
-      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[11px] font-semibold gap-1">
-        <CheckCircle2 className="h-2.5 w-2.5" />
-        {label}
-      </Badge>
+      <button
+        onClick={e => { e.stopPropagation(); onClick() }}
+        className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+      >
+        <Zap className="h-2.5 w-2.5" />
+        Gerar
+      </button>
     )
   }
 
-  // Cancelado ou estornado
-  if (aluguel.status === 'cancelado' || aluguel.status === 'estornado') {
-    return <span className="text-slate-400 text-xs">—</span>
+  // AUTOMATIC com charge: botão verde PIX/Boleto
+  if (isAutomatic && temCharge) {
+    return (
+      <button
+        onClick={e => { e.stopPropagation(); onClick() }}
+        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+      >
+        Ver PIX / Boleto
+      </button>
+    )
   }
 
-  // Pendente / atrasado com cobrança ativa: mostrar ações PIX / boleto
+  // MANUAL com PIX key: botão verde
+  if (!isAutomatic && pixKey) {
+    return (
+      <button
+        onClick={e => { e.stopPropagation(); onClick() }}
+        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+      >
+        Ver PIX
+      </button>
+    )
+  }
+
+  // MANUAL sem PIX key: botão neutro
   return (
-    <div className="flex items-center gap-1">
-      {/* PIX: botão que abre dialog com QR code */}
-      {aluguel.asaas_pix_copiaecola && (
-        <>
-          <button
-            onClick={(e) => { e.stopPropagation(); setPixOpen(true) }}
-            className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
-            title="Ver PIX copia e cola"
-          >
-            PIX
-          </button>
-
-          {pixOpen && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-              onClick={() => setPixOpen(false)}
-            >
-              <div
-                className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-800">PIX copia e cola</h3>
-                  <button onClick={() => setPixOpen(false)} className="text-slate-400 hover:text-slate-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {aluguel.asaas_pix_qrcode && (
-                  <div className="flex justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`data:image/png;base64,${aluguel.asaas_pix_qrcode}`}
-                      alt="QR Code PIX"
-                      className="h-44 w-44 rounded-lg border"
-                    />
-                  </div>
-                )}
-
-                <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 break-all text-xs font-mono text-slate-600 select-all">
-                  {aluguel.asaas_pix_copiaecola}
-                </div>
-
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(aluguel.asaas_pix_copiaecola!)
-                      .then(() => toast.success('Código PIX copiado!'))
-                      .catch(() => toast.error('Não foi possível copiar.'))
-                  }}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 transition-colors"
-                >
-                  Copiar código PIX
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Boleto */}
-      {aluguel.asaas_boleto_url && (
-        <a
-          href={aluguel.asaas_boleto_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-          title="Ver boleto"
-        >
-          Boleto
-        </a>
-      )}
-    </div>
+    <button
+      onClick={e => { e.stopPropagation(); onClick() }}
+      className="inline-flex items-center gap-1 rounded-md bg-slate-50 border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
+    >
+      Cobrar
+    </button>
   )
 }
 
@@ -274,9 +258,13 @@ export function AlugueisClient({
 }) {
   const router = useRouter()
 
-  // Modal state
+  // PagarModal state
   const [modalOpen, setModalOpen] = useState(false)
   const [pagando, setPagando] = useState<AluguelItem | null>(null)
+
+  // CobrancaModal state
+  const [cobrancaOpen, setCobrancaOpen] = useState(false)
+  const [cobrancaAluguel, setCobrancaAluguel] = useState<AluguelItem | null>(null)
   const [loadingRecibo, setLoadingRecibo] = useState<string | null>(null)
   const [loadingCobranca, setLoadingCobranca] = useState<string | null>(null)
 
@@ -378,6 +366,11 @@ export function AlugueisClient({
 
   // Handlers
   function handlePagar(aluguel: AluguelItem) { setPagando(aluguel); setModalOpen(true) }
+
+  function handleAbrirCobranca(aluguel: AluguelItem) {
+    setCobrancaAluguel(aluguel)
+    setCobrancaOpen(true)
+  }
 
   async function handleGerarRecibo(aluguel: AluguelItem) {
     setLoadingRecibo(aluguel.id)
@@ -717,7 +710,11 @@ export function AlugueisClient({
 
                     {/* Cobrança */}
                     <div className="mb-2 md:mb-0">
-                      <CobrancaCell aluguel={aluguel} />
+                      <CobrancaButton
+                        aluguel={aluguel}
+                        pixKey={profile.pix_key ?? null}
+                        onClick={() => handleAbrirCobranca(aluguel)}
+                      />
                     </div>
 
                     {/* Valor */}
@@ -879,6 +876,29 @@ export function AlugueisClient({
       )}
 
       <PagarModal open={modalOpen} onOpenChange={setModalOpen} aluguel={pagando} />
+
+      {cobrancaAluguel && (
+        <CobrancaModal
+          aluguel={cobrancaAluguel}
+          pixKey={profile.pix_key ?? null}
+          pixKeyTipo={profile.pix_key_tipo ?? null}
+          open={cobrancaOpen}
+          onClose={() => setCobrancaOpen(false)}
+          loadingCobranca={loadingCobranca === cobrancaAluguel.id}
+          onGerarCobranca={() => {
+            setCobrancaOpen(false)
+            handleGerarCobranca(cobrancaAluguel)
+          }}
+          onCancelarCobranca={() => {
+            setCobrancaOpen(false)
+            handleCancelarCobranca(cobrancaAluguel)
+          }}
+          onRegistrarPagamento={() => {
+            setCobrancaOpen(false)
+            handlePagar(cobrancaAluguel)
+          }}
+        />
+      )}
 
       {/* Bulk action bar */}
       {selecionados.size > 0 && (

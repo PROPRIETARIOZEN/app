@@ -30,6 +30,8 @@ interface Props {
     criado_em: string
     asaas_account_id: string | null
     asaas_account_status: string | null
+    pix_key?: string | null
+    pix_key_tipo?: string | null
   }
   avatarUrl: string | null
   qtdImoveis: number

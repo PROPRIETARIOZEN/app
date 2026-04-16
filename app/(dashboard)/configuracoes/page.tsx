@@ -35,14 +35,21 @@ export default async function ConfiguracoesPage() {
     (profile as typeof profile & { plano: 'elite' }).plano = 'elite'
   }
 
-  const profileData = profile ?? {
-    nome: user.email?.split('@')[0] ?? 'Usuário',
-    email: user.email ?? '',
-    telefone: null,
-    plano: 'gratis' as const,
-    criado_em: user.created_at,
-    asaas_account_id: null,
-    asaas_account_status: null,
+  const pix_key = (user.user_metadata?.pix_key as string | null) ?? null
+  const pix_key_tipo = (user.user_metadata?.pix_key_tipo as string | null) ?? null
+
+  const profileData = {
+    ...(profile ?? {
+      nome: user.email?.split('@')[0] ?? 'Usuário',
+      email: user.email ?? '',
+      telefone: null,
+      plano: 'gratis' as const,
+      criado_em: user.created_at,
+      asaas_account_id: null,
+      asaas_account_status: null,
+    }),
+    pix_key,
+    pix_key_tipo,
   }
 
   return (

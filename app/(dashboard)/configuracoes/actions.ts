@@ -11,6 +11,8 @@ export async function atualizarPerfil(input: {
   telefone: string | null
   cpf: string | null
   nome_recibo: string | null
+  pix_key?: string | null
+  pix_key_tipo?: string | null
 }): Promise<{ error?: string }> {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -25,6 +27,15 @@ export async function atualizarPerfil(input: {
     .eq('id', user.id)
 
   if (error) return { error: error.message }
+
+  // Salva chave PIX nos metadados do usuário (sem necessidade de coluna no DB)
+  if ('pix_key' in input) {
+    const { error: authError } = await supabase.auth.updateUser({
+      data: { pix_key: input.pix_key ?? null, pix_key_tipo: input.pix_key_tipo ?? null },
+    })
+    if (authError) return { error: authError.message }
+  }
+
   revalidatePath('/configuracoes')
   return {}
 }
