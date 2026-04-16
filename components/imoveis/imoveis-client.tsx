@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import {
   Plus, Building2, Home, Square, Briefcase, MapPin,
   Zap, Loader2, MoreHorizontal, LayoutGrid, List,
-  CheckCircle2, Clock, AlertTriangle, Pencil, Archive,
+  CheckCircle2, Clock, AlertTriangle, Pencil, Archive, LogOut,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ImovelModal } from '@/components/imoveis/imovel-modal'
+import { EncerrarContratoModal } from '@/components/imoveis/encerrar-contrato-modal'
 import { arquivarImovel } from '@/app/(dashboard)/imoveis/actions'
 import { formatarMoeda, formatarData } from '@/lib/helpers'
 import { LIMITES_PLANO } from '@/lib/stripe'
@@ -97,8 +98,9 @@ interface Props {
 export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
   const router = useRouter()
   const [open, setOpen]               = useState(false)
-  const [editando, setEditando]       = useState<Imovel | null>(null)
-  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [editando, setEditando]                 = useState<Imovel | null>(null)
+  const [encerrando, setEncerrando]             = useState<Imovel | null>(null)
+  const [upgradeOpen, setUpgradeOpen]           = useState(false)
   const [loadingCheckout, setLoadingCheckout] = useState(false)
   const [view, setView]               = useState<'grid' | 'list'>('grid')
 
@@ -234,7 +236,7 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
                       <DropdownMenuTrigger className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-emerald-200/60 transition-colors text-[#059669]">
                         <MoreHorizontal className="h-4 w-4" />
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-44">
+                      <DropdownMenuContent align="start" className="w-48">
                         <DropdownMenuItem onClick={() => handleEditar(imovel)}>
                           <Pencil className="h-3.5 w-3.5 mr-2" />Editar
                         </DropdownMenuItem>
@@ -242,6 +244,12 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
                           <Building2 className="h-3.5 w-3.5 mr-2" />Ver aluguéis
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => setEncerrando(imovel)}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <LogOut className="h-3.5 w-3.5 mr-2" />Encerrar contrato
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleArquivar(imovel)}
                           className="text-[#94A3B8] focus:text-[#475569]"
@@ -354,7 +362,7 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
                         <DropdownMenuTrigger className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 transition-colors text-[#64748B]">
                           <MoreHorizontal className="h-4 w-4" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem onClick={() => handleEditar(imovel)}>
                             <Pencil className="h-3.5 w-3.5 mr-2" />Editar
                           </DropdownMenuItem>
@@ -362,6 +370,12 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
                             <Building2 className="h-3.5 w-3.5 mr-2" />Ver aluguéis
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setEncerrando(imovel)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <LogOut className="h-3.5 w-3.5 mr-2" />Encerrar contrato
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleArquivar(imovel)}
                             className="text-[#94A3B8] focus:text-[#475569]"
@@ -381,6 +395,12 @@ export function ImoveisClient({ imoveis, plano, alugueisMes }: Props) {
 
       {/* ── Modais ───────────────────────────────────────────────────────── */}
       <ImovelModal open={open} onOpenChange={setOpen} imovel={editando} plano={plano} />
+
+      <EncerrarContratoModal
+        imovel={encerrando}
+        open={!!encerrando}
+        onClose={() => setEncerrando(null)}
+      />
 
       <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
         <DialogContent className="sm:max-w-sm">

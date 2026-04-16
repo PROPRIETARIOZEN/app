@@ -115,3 +115,66 @@ export async function arquivarImovel(id: string): Promise<{ error?: string }> {
   revalidatePath('/imoveis')
   return {}
 }
+
+// Encerra o contrato antecipadamente:
+// - Remove todas as cobranças pendentes/atrasadas APÓS o último mês informado
+// - Desativa o inquilino ativo (opcional)
+// - Arquiva o imóvel (opcional)
+export async function encerrarContrato(
+  imovelId: string,
+  ultimoMes: string, // YYYY-MM — último mês que deve ser mantido
+  opcoes: { desativarInquilino: boolean; arquivarImovel: boolean },
+): Promise<{ error?: string; removidos?: number }> {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autorizado' }
+
+  // Verifica propriedade
+  const { data: imovel } = await supabase
+    .from('imoveis')
+    .select('id, apelido')
+    .eq('id', imovelId)
+    .eq('user_id', user.id)
+    .single()
+  if (!imovel) return { error: 'Imóvel não encontrado' }
+
+  // Cobranças a remover: pendente/atrasado APÓS o último mês
+  const ultimoMesRef = `${ultimoMes}-01`
+  const { data: aRemover, error: errBusca } = await supabase
+    .from('alugueis')
+    .select('id')
+    .eq('imovel_id', imovelId)
+    .in('status', ['pendente', 'atrasado'])
+    .gt('mes_referencia', ultimoMesRef)
+  if (errBusca) return { error: errBusca.message }
+
+  const removidos = aRemover?.length ?? 0
+  if (removidos > 0) {
+    const ids = aRemover!.map(a => a.id)
+    const { error: errDel } = await supabase.from('alugueis').delete().in('id', ids)
+    if (errDel) return { error: errDel.message }
+  }
+
+  if (opcoes.desativarInquilino) {
+    await supabase.from('inquilinos')
+      .update({ ativo: false })
+      .eq('imovel_id', imovelId)
+      .eq('ativo', true)
+  }
+
+  if (opcoes.arquivarImovel) {
+    await supabase.from('imoveis')
+      .update({ ativo: false })
+      .eq('id', imovelId)
+      .eq('user_id', user.id)
+  }
+
+  await registrarLog(user.id, 'CONTRATO_ENCERRADO', 'imovel', imovelId, {
+    ultimoMes, removidos, ...opcoes,
+  })
+
+  revalidatePath('/imoveis')
+  revalidatePath('/alugueis')
+  revalidatePath('/dashboard')
+  return { removidos }
+}
