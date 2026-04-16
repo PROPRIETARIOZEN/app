@@ -742,7 +742,7 @@ export function AlugueisClient({
                             <>
                               <DropdownMenuItem
                                 disabled={loadingRecibo === aluguel.id}
-                                onSelect={() => handleGerarRecibo(aluguel)}
+                                onClick={() => handleGerarRecibo(aluguel)}
                               >
                                 <Receipt className="h-3.5 w-3.5 mr-2" />
                                 {aluguel.recibo_gerado ? 'Ver recibo' : 'Gerar recibo'}
@@ -760,7 +760,7 @@ export function AlugueisClient({
                                   {!aluguel.asaas_charge_id ? (
                                     <DropdownMenuItem
                                       disabled={loadingCobranca === aluguel.id}
-                                      onSelect={() => handleGerarCobranca(aluguel)}
+                                      onClick={() => handleGerarCobranca(aluguel)}
                                     >
                                       {loadingCobranca === aluguel.id
                                         ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
@@ -771,7 +771,7 @@ export function AlugueisClient({
                                   ) : (
                                     <DropdownMenuItem
                                       disabled={loadingCobranca === aluguel.id}
-                                      onSelect={() => handleCancelarCobranca(aluguel)}
+                                      onClick={() => handleCancelarCobranca(aluguel)}
                                       className="text-red-600 focus:text-red-600"
                                     >
                                       {loadingCobranca === aluguel.id
@@ -786,21 +786,21 @@ export function AlugueisClient({
                               )}
                               {aluguel.imovel?.billing_mode !== 'AUTOMATIC' && (
                                 <>
-                                  <DropdownMenuItem onSelect={() => handlePagar(aluguel)}>
+                                  <DropdownMenuItem onClick={() => handlePagar(aluguel)}>
                                     <Banknote className="h-3.5 w-3.5 mr-2" />
                                     Registrar pagamento
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                 </>
                               )}
-                              <DropdownMenuItem onSelect={() => handlePagar(aluguel)}>
+                              <DropdownMenuItem onClick={() => handlePagar(aluguel)}>
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-2" />
                                 Marcar como pago
                               </DropdownMenuItem>
                             </>
                           )}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={toggleDocumentos}>
+                          <DropdownMenuItem onClick={toggleDocumentos}>
                             <Paperclip className="h-3.5 w-3.5 mr-2" />
                             {isDocOpen ? 'Fechar documentos' : 'Documentos do período'}
                           </DropdownMenuItem>
